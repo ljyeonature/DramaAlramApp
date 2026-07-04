@@ -33,7 +33,20 @@ function requireEnv(key: string): string {
   if (!v || v.trim() === '') {
     throw new Error(`환경변수 ${key} 가 비어 있음. crawler/.env 확인.`);
   }
-  return v.trim();
+  const trimmed = v.trim();
+  // HTTP 헤더/URL에는 ASCII 만 허용됨. 한글/공백/따옴표 등이 섞여 들어오면
+  // fetch 단계에서 난해한 ByteString 오류로 죽으므로 사전 차단.
+  for (let i = 0; i < trimmed.length; i++) {
+    const code = trimmed.charCodeAt(i);
+    if (code > 126 || code < 32) {
+      throw new Error(
+        `환경변수 ${key} 에 비 ASCII 문자가 포함됨 (위치 ${i}, 코드 ${code}). ` +
+        `Supabase/TMDB 값을 복사할 때 안내 문구/한글 IME 입력이 섞였을 가능성. ` +
+        `해당 Secret 을 삭제 후 원본 위치에서 복사 아이콘으로 재등록하세요.`
+      );
+    }
+  }
+  return trimmed;
 }
 
 async function main(): Promise<void> {

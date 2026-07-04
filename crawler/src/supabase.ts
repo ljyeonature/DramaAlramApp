@@ -1,6 +1,7 @@
 // Supabase 클라이언트 — service_role 키로 RLS 우회. 서버 사이드 전용.
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import WebSocket from 'ws';
 import type {
   DramaRow,
   EpisodeRow,
@@ -14,6 +15,13 @@ export function makeClient(url: string, serviceRoleKey: string): SupabaseClient 
     auth: {
       autoRefreshToken: false,
       persistSession: false,
+    },
+    // 크롤러는 realtime을 쓰지 않지만 supabase-js가 클라이언트 초기화 시점에
+    // WebSocket 생성자를 요구한다. Node에는 표준 전역 WebSocket 이 버전마다 다르므로
+    // ws 패키지를 명시적으로 주입해 어느 Node 에서도 초기화가 성공하게 한다.
+    realtime: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      transport: WebSocket as any,
     },
   });
 }
