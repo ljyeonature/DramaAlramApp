@@ -1,0 +1,25 @@
+// SupabaseConfig.swift 템플릿.
+//
+// 실제 사용법 (신규 클론 시):
+//   1. 이 파일을 같은 폴더에 SupabaseConfig.swift 로 복사
+//        cp SupabaseConfig.swift.example SupabaseConfig.swift
+//   2. 아래 url / anonKey 를 본인 Supabase 값으로 교체
+//        - Project Settings → API → Project URL / anon public key
+//
+// 파일명이 .swift.example 이라 Xcode Synchronized Group 은 무시함 (컴파일 X).
+// 실제 SupabaseConfig.swift 는 .gitignore 처리되어 git 에 안 올라감.
+
+import Foundation
+
+enum SupabaseConfig {
+    static let url = "REPLACE_WITH_YOUR_SUPABASE_URL"
+    static let anonKey = "REPLACE_WITH_YOUR_SUPABASE_ANON_KEY"
+
+    static var isConfigured: Bool {
+        !url.hasPrefix("REPLACE_") && !anonKey.hasPrefix("REPLACE_")
+    }
+
+    static var baseURL: URL? {
+        URL(string: url)
+    }
+}

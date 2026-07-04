@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>드라마 편성표 앱 아키텍처 설계 (DramaApp)</title>
+<style>
+  @page {
+    size: A4;
+    margin: 20mm 18mm;
+    @bottom-right { content: counter(page) " / " counter(pages); }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    font-family: -apple-system, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    color: #1a1a1a;
+    margin: 0;
+    padding: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .cover {
+    page-break-after: always;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    background: linear-gradient(135deg, #1e3a8a 0%, #4338ca 100%);
+    color: white;
+    padding: 60px 40px;
+  }
+  .cover h1 {
+    font-size: 36pt;
+    font-weight: 800;
+    margin: 0 0 16px 0;
+    border: none;
+    color: white;
+    letter-spacing: -0.02em;
+  }
+  .cover .subtitle {
+    font-size: 14pt;
+    opacity: 0.9;
+    margin-bottom: 40px;
+  }
+  .cover .meta {
+    font-size: 11pt;
+    opacity: 0.8;
+    margin-top: 60px;
+    line-height: 1.8;
+  }
+  .cover .principle {
+    margin-top: 40px;
+    padding: 24px 32px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 12px;
+    font-size: 11pt;
+    text-align: left;
+    max-width: 560px;
+    line-height: 1.7;
+  }
+  h1 {
+    font-size: 20pt;
+    font-weight: 700;
+    color: #1e3a8a;
+    border-bottom: 3px solid #1e3a8a;
+    padding-bottom: 8px;
+    margin-top: 36px;
+    margin-bottom: 18px;
+    page-break-after: avoid;
+    page-break-before: always;
+  }
+  h1:first-of-type { page-break-before: auto; }
+  h2 {
+    font-size: 14pt;
+    font-weight: 700;
+    color: #1f2937;
+    margin-top: 28px;
+    margin-bottom: 12px;
+    border-left: 4px solid #4338ca;
+    padding-left: 10px;
+    page-break-after: avoid;
+  }
+  h3 {
+    font-size: 12pt;
+    font-weight: 700;
+    color: #374151;
+    margin-top: 20px;
+    margin-bottom: 8px;
+    page-break-after: avoid;
+  }
+  p { margin: 8px 0; }
+  ul, ol { margin: 8px 0 8px 24px; padding: 0; }
+  li { margin: 4px 0; }
+  strong { color: #111827; font-weight: 700; }
+  em { color: #4338ca; font-style: normal; font-weight: 600; }
+  code {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 9.2pt;
+    background: #f3f4f6;
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: #be185d;
+  }
+  pre {
+    background: #1f2937;
+    color: #f9fafb;
+    padding: 14px 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8.8pt;
+    line-height: 1.45;
+    page-break-inside: avoid;
+    margin: 10px 0;
+  }
+  pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    font-size: inherit;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 9.5pt;
+    page-break-inside: avoid;
+  }
+  th {
+    background: #4338ca;
+    color: white;
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+    border: 1px solid #4338ca;
+  }
+  td {
+    padding: 7px 10px;
+    border: 1px solid #d1d5db;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #f9fafb; }
+  blockquote {
+    border-left: 4px solid #fbbf24;
+    background: #fffbeb;
+    padding: 10px 16px;
+    margin: 12px 0;
+    color: #78350f;
+    border-radius: 0 4px 4px 0;
+  }
+  .toc {
+    page-break-after: always;
+    padding: 20px 0;
+  }
+  .toc h1 { page-break-before: auto; margin-top: 0; }
+  .toc ol { font-size: 11pt; line-height: 2; }
+  .toc a { color: #1e3a8a; text-decoration: none; }
+  .callout-warn {
+    background: #fef2f2;
+    border-left: 4px solid #dc2626;
+    padding: 10px 14px;
+    margin: 12px 0;
+    color: #7f1d1d;
+    border-radius: 0 4px 4px 0;
+  }
+  .callout-tip {
+    background: #ecfdf5;
+    border-left: 4px solid #10b981;
+    padding: 10px 14px;
+    margin: 12px 0;
+    color: #064e3b;
+    border-radius: 0 4px 4px 0;
+  }
+  .ascii {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    padding: 12px;
+    border-radius: 4px;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 8.5pt;
+    line-height: 1.4;
+    white-space: pre;
+    overflow-x: auto;
+    page-break-inside: avoid;
+  }
+  .badge {
+    display: inline-block;
+    background: #4338ca;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 8.5pt;
+    font-weight: 600;
+    margin-right: 6px;
+  }
+  hr { border: none; border-top: 1px solid #e5e7eb; margin: 24px 0; }
+</style>
+</head>
+<body>
+
+<!-- ========== COVER ========== -->
+<div class="cover">
+  <h1>드라마 편성표 앱<br>아키텍처 설계 문서</h1>
+  <div class="subtitle">DramaApp · 1인 개발자를 위한 실전 아키텍처 가이드</div>
+  <div class="principle">
+    <strong>핵심 의사결정 원칙</strong><br>
+    1. MVP는 버릴 수 있게, 코어 도메인은 깨지지 않게.<br>
+    2. 혼자서 운영 가능한 만큼만 기능을 연다.
+  </div>
+  <div class="meta">
+    프로젝트: DramaApp (iOS)<br>
+    작성일: 2026-05-24<br>
+    대상: 1인 개발 시작 → 1년 내 10만 MAU 시나리오
+  </div>
+</div>
+
+<!-- ========== TOC ========== -->
+<div class="toc">
+  <h1>목차</h1>
+  <ol>
+    <li>앱 전체 구조</li>
+    <li>MVP 우선순위</li>
+    <li>화면 구성</li>
+    <li>DB 테이블 설계</li>
+    <li>API 설계</li>
+    <li>추천 기술 스택</li>
+    <li>서버 아키텍처</li>
+    <li>푸시 알림 구조</li>
+    <li>커뮤니티 설계</li>
+    <li>드라마 데이터 수집 전략</li>
+    <li>예상 트래픽 고려사항</li>
+    <li>비용 절감 전략</li>
+    <li>추후 수익화 아이디어</li>
+    <li>앱스토어 출시 시 주의사항</li>
+    <li>실제 서비스 운영 시 가장 어려운 점</li>
+    <li>혼자 개발할 경우 현실적인 개발 순서</li>
+    <li>3개월 개발 로드맵</li>
+    <li>확장 가능한 구조 설계 방법</li>
+    <li>최종 요약 — 오늘 당장 할 일</li>
+  </ol>
+</div>
+
+<!-- ========== 1. 앱 전체 구조 ========== -->
+<h1>1. 앱 전체 구조</h1>
+
+<h2>1-1. 시스템 레벨 구성도</h2>
+<div class="ascii">┌────────────────────────┐       ┌──────────────────────────┐
+│       iOS App          │       │   Supabase (BaaS)        │
+│  SwiftUI + MVVM        │ HTTPS │  Postgres / Auth / RLS   │
+│  Swift Concurrency     │◀─────▶│  Storage / Edge Funcs    │
+│  TCA(선택) / Repository│       │  Realtime(나중에)        │
+└──────────┬─────────────┘       └────────────┬─────────────┘
+           │                                  │
+           │ APNs(p8 키)                      │ pg_cron / Edge Function
+           ▼                                  ▼
+┌────────────────────────┐       ┌──────────────────────────┐
+│  Apple Push Service    │       │  Crawler Worker          │
+│  (방영 10분 전 발송)   │       │  Cloud Run / Fly.io      │
+└────────────────────────┘       │  - KBS/MBC/SBS/tvN/JTBC  │
+                                 │  - TMDB / KOFIC API      │
+                                 │  - 매시간 cron 실행      │
+                                 └────────────┬─────────────┘
+                                              ▼
+                                 ┌──────────────────────────┐
+                                 │  Object Storage (이미지) │
+                                 │  Supabase Storage + CDN  │
+                                 └──────────────────────────┘</div>
+
+<h2>1-2. iOS 앱 아키텍처</h2>
+<p><strong>선택: SwiftUI + MVVM + Repository 패턴 (TCA는 도입하지 않음).</strong></p>
+<table>
+  <tr><th>기준</th><th>MVVM</th><th>TCA</th></tr>
+  <tr><td>학습 곡선</td><td>낮음</td><td>높음</td></tr>
+  <tr><td>테스트 용이성</td><td>중간</td><td>매우 높음</td></tr>
+  <tr><td>보일러플레이트</td><td>적음</td><td>많음</td></tr>
+  <tr><td>1인 개발 적합성</td><td>★★★★★</td><td>★★</td></tr>
+  <tr><td>화면 30개 이상 시 일관성</td><td>중간</td><td>매우 좋음</td></tr>
+</table>
+<p><strong>이유:</strong> 1인 개발에서 TCA는 가속이 아니라 감속입니다. 화면이 30개를 넘기 시작하고 상태가 얽히기 시작하면 그때 <em>부분 도입</em>(Feature 단위)이 더 현실적입니다. 처음부터 TCA를 깔면 단순한 즐겨찾기 토글 하나에도 Action/Reducer를 그려야 합니다.</p>
+<p><strong>Clean Architecture는 "축소판"으로만.</strong> 3-layer로 충분합니다:</p>
+<ul>
+  <li><strong>Presentation</strong>: SwiftUI View + ViewModel(<code>@Observable</code>)</li>
+  <li><strong>Domain</strong>: <code>Drama</code>, <code>Episode</code>, <code>Schedule</code> 모델 + <code>…UseCase</code> (옵션, 복잡한 흐름만)</li>
+  <li><strong>Data</strong>: <code>Repository</code> 프로토콜 + <code>SupabaseDramaRepository</code> 구현체</li>
+</ul>
+<p>레포지토리를 프로토콜로 끊어둬야 나중에 Supabase → 자체 백엔드(NestJS)로 갈아낄 때 ViewModel을 안 건드릴 수 있습니다.</p>
+
+<h2>1-3. 폴더 구조 예시</h2>
+<pre><code>DramaApp/
+├── App/
+│   ├── DramaAppApp.swift          // @main, SwiftUI App
+│   ├── AppDependencies.swift      // DI 컨테이너
+│   └── RootView.swift             // 탭 컨테이너
+├── Features/
+│   ├── Schedule/                  // 편성표
+│   │   ├── ScheduleView.swift
+│   │   ├── ScheduleViewModel.swift
+│   │   └── Components/
+│   ├── Favorites/
+│   ├── Search/
+│   ├── Community/
+│   │   ├── BoardList/
+│   │   ├── PostDetail/
+│   │   └── Composer/
+│   └── Profile/
+├── Domain/
+│   ├── Models/                    // Drama, Episode, Channel, Post...
+│   └── UseCases/                  // ToggleFavoriteUseCase 등 (필요할 때만)
+├── Data/
+│   ├── Repositories/
+│   │   ├── DramaRepository.swift           // 프로토콜
+│   │   └── SupabaseDramaRepository.swift   // 구현체
+│   ├── Network/
+│   │   ├── SupabaseClient+Shared.swift
+│   │   └── APIError.swift
+│   └── Local/
+│       ├── FavoritesStore.swift            // SwiftData
+│       └── ScheduleCache.swift             // 디스크 캐시
+├── Push/
+│   ├── PushService.swift
+│   └── NotificationCategory.swift
+├── DesignSystem/
+│   ├── Colors.swift
+│   ├── Typography.swift
+│   └── Components/                // DramaCard, EpisodeRow 등
+└── Resources/
+    ├── Localizable.xcstrings      // String Catalog
+    └── Assets.xcassets</code></pre>
+<p><strong>Feature-first 폴더링</strong>을 강력 추천합니다. Layer-first(<code>Views/</code>, <code>ViewModels/</code> 따로)는 화면이 늘어나면 한 기능 수정에 폴더 5개를 왔다갔다 해야 합니다.</p>
+<p>추후 사용자가 늘어 빌드가 느려지면(&gt;2분), 각 <code>Feature/</code>를 SPM 로컬 패키지로 분리합니다. 이때를 위해 <strong>Feature 간 직접 import를 금지</strong>하고 모두 <code>Domain</code>을 통해 통신하도록 처음부터 규칙을 잡으세요.</p>
+
+<!-- ========== 2. MVP 우선순위 ========== -->
+<h1>2. MVP 우선순위</h1>
+<p>"매일 들어오는 플랫폼"이 목표라면 <strong>재방문을 만드는 기능부터</strong> 깝니다. 커뮤니티는 사용자가 모이기 전에는 죽은 공간이고, 죽은 게시판은 신규 사용자를 쫓아냅니다.</p>
+<table>
+  <tr><th>우선순위</th><th>기능</th><th>이유</th><th>출시 시점</th></tr>
+  <tr><td><span class="badge">P0</span></td><td>편성표 조회(채널/날짜)</td><td>앱 핵심 가치. 이게 없으면 앱이 아님</td><td>v1.0</td></tr>
+  <tr><td><span class="badge">P0</span></td><td>즐겨찾기 + 로컬 저장</td><td>재방문 동기. 서버 없이도 동작 가능</td><td>v1.0</td></tr>
+  <tr><td><span class="badge">P0</span></td><td>방영 10분 전 푸시</td><td>"왜 매일 켜는가"의 핵심</td><td>v1.0</td></tr>
+  <tr><td><span class="badge">P0</span></td><td>Apple 로그인 (게스트 포함)</td><td>즐겨찾기 동기화 + 4.8 가이드 대응</td><td>v1.0</td></tr>
+  <tr><td><span class="badge">P1</span></td><td>검색(드라마명)</td><td>편성표만으론 신규 드라마 찾기 불편</td><td>v1.1</td></tr>
+  <tr><td><span class="badge">P1</span></td><td>장르 필터</td><td></td><td>v1.1</td></tr>
+  <tr><td><span class="badge">P1</span></td><td>상세 화면(시놉시스/회차)</td><td>TMDB 데이터로 빠르게</td><td>v1.1</td></tr>
+  <tr><td><span class="badge">P2</span></td><td>커뮤니티(게시판/댓글)</td><td>사용자 1만 모인 후</td><td>v2.0</td></tr>
+  <tr><td><span class="badge">P2</span></td><td>신고/차단/블라인드</td><td>커뮤니티와 동시</td><td>v2.0</td></tr>
+  <tr><td><span class="badge">P3</span></td><td>인기글, 활동 기록</td><td></td><td>v2.x</td></tr>
+  <tr><td><span class="badge">P3</span></td><td>배우 기반 검색, 출연작 알림</td><td>TMDB person 데이터 필요</td><td>v3.0</td></tr>
+  <tr><td><span class="badge">P4</span></td><td>실시간 채팅</td><td>운영 부담 큼. 정말 필요할 때</td><td>v4.0+</td></tr>
+</table>
+<div class="callout-tip"><strong>핵심:</strong> P0 4개만 정확히 구현해도 "편성표 + 알림" 시장에서 충분히 경쟁력 있습니다. 한국에서 드라마 알림 시장은 비어 있습니다. 커뮤니티는 후행 기능입니다.</div>
+
+<!-- ========== 3. 화면 구성 ========== -->
+<h1>3. 화면 구성</h1>
+<p>탭바 5개 구조: <code>[편성표] [즐겨찾기] [검색] [커뮤니티] [마이]</code></p>
+
+<h2>3-1. 편성표 탭 (Schedule)</h2>
+<div class="ascii">┌──────────────────────────────────┐
+│  ←  5월 24일(토)  →    [채널 ▼]  │  ← 날짜 스와이프, 채널 필터
+├──────────────────────────────────┤
+│ 19:30  KBS2  [LIVE] 드라마A 12회 │  ← 현재 방영중은 빨간 배지
+│        ♡  알림 ON                │
+├──────────────────────────────────┤
+│ 20:40  MBC   드라마B 8회         │
+│        ♡  알림                   │
+├──────────────────────────────────┤
+│ 21:50  SBS   드라마C (첫방)      │
+│        ♡  알림                   │
+└──────────────────────────────────┘</div>
+<p>상단: 가로 스크롤 가능한 날짜 캐러셀(±14일). 우측 상단: 채널 필터(다중 선택). 행 탭 → 드라마 상세.</p>
+
+<h2>3-2. 즐겨찾기 탭 (Favorites)</h2>
+<div class="ascii">┌──────────────────────────────────┐
+│  내 드라마 (12)         [편집]   │
+├──────────────────────────────────┤
+│ [🔴 NEW] 드라마A                │
+│  오늘 19:30 12회 방영            │
+├──────────────────────────────────┤
+│ 드라마B                          │
+│  내일 20:40 9회 (D-1)            │
+├──────────────────────────────────┤
+│ 드라마C (종영)                   │
+│  전체 16회 ▶                     │
+└──────────────────────────────────┘</div>
+<p>상태 그룹: 오늘 방영 / 내일 / 이번주 / 종영. 종영작은 별도 섹션으로 내려서 활성 드라마에 집중시킵니다.</p>
+
+<h2>3-3. 검색 탭</h2>
+<p>상단: 검색바. 하단: 인기 검색어 + 장르 칩. 결과는 드라마/배우 탭 분리(배우는 v3).</p>
+
+<h2>3-4. 드라마 상세</h2>
+<div class="ascii">┌──────────────────────────────────┐
+│   [포스터 이미지]                │
+│   드라마A · 2026 · KBS2          │
+│   ♡ 즐겨찾기  🔔 알림 받기       │
+├──────────────────────────────────┤
+│  [회차] [정보] [출연] [게시판]   │  ← 세그먼트
+├──────────────────────────────────┤
+│  12회  5/24 19:30                │
+│  11회  5/23 19:30  ▶             │
+│  ...                             │
+└──────────────────────────────────┘</div>
+
+<h2>3-5. 커뮤니티 (드라마 게시판)</h2>
+<p>게시글 카드: 제목 / 작성자(닉네임) / 좋아요·댓글 수 / <strong>스포일러 토글</strong>. 스포 게시글은 회색 마스킹 + "탭해서 보기".</p>
+
+<h2>3-6. 마이</h2>
+<p>프로필(닉네임, 가입일), 내 활동(쓴 글/댓글), 알림 설정, 차단 목록, 로그아웃, <strong>회원 탈퇴(4.8 필수)</strong>.</p>
+
+<!-- ========== 4. DB 테이블 설계 ========== -->
+<h1>4. DB 테이블 설계</h1>
+<p>PostgreSQL 기준. 모든 PK는 <code>uuid</code> (Supabase 관행), 모든 테이블에 <code>created_at</code>, <code>updated_at</code>, 필요시 <code>deleted_at</code>(소프트 삭제).</p>
+
+<h2>4-1. ERD (텍스트)</h2>
+<div class="ascii">users ──&lt; favorites &gt;── dramas ──&lt; episodes
+   │                       │
+   │                       ├──&lt; drama_casts &gt;── persons
+   │                       └──&lt; drama_genres &gt;── genres
+   │
+   ├──&lt; devices              (푸시 토큰)
+   ├──&lt; posts &gt;── comments ──&lt; comment_likes
+   │     │
+   │     └──&lt; post_likes
+   ├──&lt; reports
+   └──&lt; blocks</div>
+
+<h2>4-2. 핵심 DDL 예시</h2>
+<pre><code>-- 1. 사용자
+create table users (
+  id           uuid primary key default gen_random_uuid(),
+  apple_sub    text unique not null,
+  nickname     text unique not null,
+  avatar_url   text,
+  is_blocked   boolean default false,
+  created_at   timestamptz default now(),
+  updated_at   timestamptz default now()
+);
+
+-- 2. 채널
+create table channels (
+  id       uuid primary key default gen_random_uuid(),
+  code     text unique not null,   -- 'KBS2','MBC','SBS','tvN','JTBC','NETFLIX'
+  name     text not null,
+  type     text not null,          -- 'BROADCAST' | 'OTT'
+  logo_url text
+);
+
+-- 3. 드라마
+create table dramas (
+  id            uuid primary key default gen_random_uuid(),
+  title         text not null,
+  title_en      text,
+  synopsis      text,
+  poster_url    text,
+  channel_id    uuid references channels(id),
+  status        text not null,     -- 'UPCOMING' | 'ON_AIR' | 'ENDED'
+  total_episodes int,
+  start_date    date,
+  end_date      date,
+  tmdb_id       int,
+  external_id   text,
+  created_at    timestamptz default now(),
+  updated_at    timestamptz default now()
+);
+create index idx_dramas_status on dramas(status);
+create index idx_dramas_channel on dramas(channel_id);
+create index idx_dramas_title_trgm on dramas using gin (title gin_trgm_ops);
+
+-- 4. 회차
+create table episodes (
+  id          uuid primary key default gen_random_uuid(),
+  drama_id    uuid not null references dramas(id) on delete cascade,
+  number      int not null,
+  air_time    timestamptz not null,
+  duration_min int default 70,
+  is_special  boolean default false,
+  created_at  timestamptz default now(),
+  unique (drama_id, number)
+);
+create index idx_episodes_air_time on episodes(air_time);
+create index idx_episodes_air_date on episodes((air_time::date));
+
+-- 5. 즐겨찾기
+create table favorites (
+  user_id    uuid not null references users(id) on delete cascade,
+  drama_id   uuid not null references dramas(id) on delete cascade,
+  notify_air boolean default true,
+  notify_new_episode boolean default true,
+  created_at timestamptz default now(),
+  primary key (user_id, drama_id)
+);
+
+-- 6. 디바이스
+create table devices (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid references users(id) on delete cascade,
+  apns_token   text unique not null,
+  app_version  text,
+  os_version   text,
+  locale       text default 'ko-KR',
+  last_seen_at timestamptz default now(),
+  created_at   timestamptz default now()
+);
+
+-- 7. 게시글
+create table posts (
+  id          uuid primary key default gen_random_uuid(),
+  drama_id    uuid not null references dramas(id) on delete cascade,
+  user_id     uuid not null references users(id),
+  title       text not null,
+  body        text not null,
+  is_spoiler  boolean default false,
+  episode_no  int,
+  like_count    int default 0,    -- 비정규화 (성능)
+  comment_count int default 0,    -- 비정규화
+  hot_score   real default 0,     -- 인기글 점수
+  is_hidden   boolean default false,
+  created_at  timestamptz default now(),
+  updated_at  timestamptz default now()
+);
+create index idx_posts_drama_created on posts(drama_id, created_at desc);
+create index idx_posts_hot on posts(hot_score desc) where is_hidden = false;
+
+-- 8. 댓글
+create table comments (
+  id         uuid primary key default gen_random_uuid(),
+  post_id    uuid not null references posts(id) on delete cascade,
+  user_id    uuid not null references users(id),
+  parent_id  uuid references comments(id),
+  body       text not null,
+  is_spoiler boolean default false,
+  like_count int default 0,
+  is_hidden  boolean default false,
+  created_at timestamptz default now()
+);
+
+-- 9. 좋아요
+create table post_likes (
+  post_id   uuid not null references posts(id) on delete cascade,
+  user_id   uuid not null references users(id) on delete cascade,
+  created_at timestamptz default now(),
+  primary key (post_id, user_id)
+);
+
+-- 10. 신고
+create table reports (
+  id           uuid primary key default gen_random_uuid(),
+  reporter_id  uuid not null references users(id),
+  target_type  text not null,    -- 'POST' | 'COMMENT' | 'USER'
+  target_id    uuid not null,
+  reason       text not null,
+  detail       text,
+  status       text default 'PENDING',
+  created_at   timestamptz default now()
+);
+
+-- 11. 차단
+create table blocks (
+  blocker_id uuid not null references users(id) on delete cascade,
+  blocked_id uuid not null references users(id) on delete cascade,
+  created_at timestamptz default now(),
+  primary key (blocker_id, blocked_id)
+);
+
+-- 12. 알림 큐
+create table push_jobs (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid references users(id) on delete cascade,
+  episode_id     uuid references episodes(id) on delete cascade,
+  scheduled_at   timestamptz not null,
+  status         text default 'PENDING',
+  payload        jsonb not null,
+  created_at     timestamptz default now(),
+  sent_at        timestamptz
+);
+create index idx_push_jobs_due on push_jobs(scheduled_at) where status = 'PENDING';</code></pre>
+
+<div class="callout-warn">
+<strong>중요 포인트</strong><br>
+• <code>like_count</code>, <code>comment_count</code>는 <strong>비정규화 필드</strong>입니다. 좋아요할 때마다 <code>count(*)</code>를 돌리면 DB가 죽습니다. 트리거 또는 트랜잭션에서 증감.<br>
+• <code>episodes.air_time</code>은 반드시 <strong><code>timestamptz</code>(UTC 저장)</strong>. 클라이언트에서 KST 변환.<br>
+• <code>dramas.title</code>에 <code>pg_trgm</code> 인덱스로 한글 부분 검색 지원.<br>
+• 모든 PK는 <code>uuid</code> — 분산 환경에서 ID 충돌 방지, 추측 불가(보안).
+</div>
+
+<h2>4-3. RLS (Row-Level Security) 예시</h2>
+<p>Supabase는 RLS가 필수입니다. 안 켜면 익명 사용자가 다 읽고 씁니다.</p>
+<pre><code>alter table posts enable row level security;
+
+create policy "posts_select_all" on posts
+  for select using (is_hidden = false);
+
+create policy "posts_insert_own" on posts
+  for insert with check (auth.uid() = user_id);
+
+create policy "posts_update_own" on posts
+  for update using (auth.uid() = user_id);
+
+create policy "posts_hide_blocked" on posts
+  for select using (
+    not exists (
+      select 1 from blocks
+      where blocker_id = auth.uid() and blocked_id = posts.user_id
+    )
+  );</code></pre>
+
+<!-- ========== 5. API 설계 ========== -->
+<h1>5. API 설계</h1>
+<p>Supabase를 쓰면 대부분의 CRUD는 <strong>PostgREST가 자동 생성</strong>해주므로 직접 REST 설계는 <em>복잡한 도메인 로직</em>에만 적용합니다.</p>
+
+<h2>5-1. Supabase 자동 API (직접 사용)</h2>
+<pre><code># 오늘 편성표
+GET /rest/v1/episodes?
+    air_time=gte.2026-05-24T00:00:00%2B09:00&amp;
+    air_time=lt.2026-05-25T00:00:00%2B09:00&amp;
+    select=*,drama:dramas(id,title,poster_url,channel:channels(code,name))&amp;
+    order=air_time.asc
+
+# 즐겨찾기 추가
+POST /rest/v1/favorites
+{ "user_id": "...", "drama_id": "..." }</code></pre>
+
+<h2>5-2. Edge Function이 필요한 케이스 (직접 설계)</h2>
+<p>PostgREST로 어려운 것: 트랜잭션, 외부 API 호출, 무거운 집계, 푸시 발송.</p>
+<pre><code>POST /functions/v1/toggle-favorite
+Authorization: Bearer &lt;user_jwt&gt;
+{ "drama_id": "uuid" }
+
+Response 200:
+{
+  "favorited": true,
+  "push_jobs_scheduled": 12   // 즐겨찾기와 동시에 향후 12회차 알림 예약
+}</code></pre>
+
+<pre><code>GET /functions/v1/home-feed
+Authorization: Bearer &lt;user_jwt&gt;
+
+Response 200:
+{
+  "on_air_now": [...],         // 지금 방영중
+  "starts_soon": [...],        // 1시간 이내 시작
+  "favorites_today": [...],    // 즐겨찾기 중 오늘 방영
+  "hot_posts": [...]
+}</code></pre>
+
+<pre><code>POST /functions/v1/posts/{post_id}/report
+{
+  "reason": "SPOILER",
+  "detail": "회차 정보에 결말 노출"
+}</code></pre>
+
+<h2>5-3. API 응답 컨벤션</h2>
+<pre><code>// 성공
+{ "data": { ... } }
+
+// 페이지네이션 (커서 기반)
+{
+  "data": [...],
+  "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNS0yNFQxMjowMDowMFoifQ=="
+}
+
+// 에러
+{
+  "error": {
+    "code": "FAVORITE_LIMIT_EXCEEDED",
+    "message": "즐겨찾기는 최대 100개까지 가능합니다."
+  }
+}</code></pre>
+<p><strong>페이지네이션은 cursor 기반으로 처음부터.</strong> 인스타·트위터식 무한스크롤에서 offset은 <code>LIMIT 20 OFFSET 10000</code> 같은 쿼리에서 OOM을 만듭니다.</p>
+
+<!-- ========== 6. 추천 기술 스택 ========== -->
+<h1>6. 추천 기술 스택</h1>
+
+<h2>6-1. 백엔드 비교 (1인 개발 + 한국 시장 기준)</h2>
+<table>
+  <tr><th>항목</th><th>Firebase</th><th>Supabase ★</th><th>Spring Boot + MySQL</th><th>NestJS + Postgres</th></tr>
+  <tr><td>초기 개발 속도</td><td>★★★★★</td><td>★★★★★</td><td>★★</td><td>★★★</td></tr>
+  <tr><td>학습 비용 (1인)</td><td>낮음</td><td>낮음</td><td>매우 높음</td><td>중간</td></tr>
+  <tr><td>관계형 쿼리</td><td>✗ (NoSQL)</td><td>✓</td><td>✓</td><td>✓</td></tr>
+  <tr><td>한국 데이터 주권</td><td>미국 리전</td><td>Seoul ap-northeast-2 ✓</td><td>자유</td><td>자유</td></tr>
+  <tr><td>푸시</td><td>FCM 통합</td><td>APNs 직접</td><td>직접</td><td>직접</td></tr>
+  <tr><td>인증 (Apple)</td><td>✓</td><td>✓</td><td>직접 구현</td><td>직접 구현</td></tr>
+  <tr><td>실시간</td><td>Firestore listener</td><td>Realtime (CDC)</td><td>직접 WebSocket</td><td>직접 WebSocket</td></tr>
+  <tr><td>1만 MAU 월 비용</td><td>$25~</td><td>$25 (Pro)</td><td>$30~50</td><td>$30~50</td></tr>
+  <tr><td>10만 MAU 월 비용</td><td>$200~500</td><td>$100~300</td><td>$100~200</td><td>$100~200</td></tr>
+  <tr><td>벤더 락인</td><td><strong>매우 높음</strong></td><td>낮음 (Postgres 표준)</td><td>없음</td><td>없음</td></tr>
+</table>
+<div class="callout-tip"><strong>최종 추천: Supabase로 시작 → 트래픽이 Pro 한도(8GB DB / 250GB egress)를 넘으면 일부 워크로드만 분리.</strong></div>
+
+<p><strong>이유:</strong></p>
+<ol>
+  <li><strong>Postgres 표준</strong>: 나중에 AWS RDS로 옮기는 게 SQL dump 한 번이면 됩니다. Firestore에서 RDB로 옮기는 건 거의 재작성입니다.</li>
+  <li><strong>관계형 쿼리</strong>: 드라마-회차-즐겨찾기-알림은 본질적으로 관계형입니다. Firestore에서 "내 즐겨찾기 드라마의 오늘 방영 회차"를 뽑는 건 N+1 지옥입니다.</li>
+  <li><strong>RLS만 잘 짜면 백엔드 코드가 거의 0</strong>: 1인 개발자에게 결정적입니다.</li>
+  <li><strong>Edge Function(Deno/TypeScript)</strong>으로 복잡한 로직만 처리.</li>
+</ol>
+<p><strong>다음 단계 트리거:</strong> MAU 5만 이상 + Edge Function이 cold start로 느려지면 → 핫 패스만 <strong>NestJS + Fly.io</strong>로 빼냅니다. (Spring Boot는 1인 운영 부담이 큼)</p>
+
+<h2>6-2. iOS 의존성 (최소)</h2>
+<table>
+  <tr><th>라이브러리</th><th>용도</th><th>대안</th></tr>
+  <tr><td><code>supabase-swift</code></td><td>API/Auth 클라이언트</td><td>URLSession 직접</td></tr>
+  <tr><td><code>Kingfisher</code></td><td>이미지 캐싱</td><td>AsyncImage (성능↓)</td></tr>
+  <tr><td><strong>SwiftData</strong></td><td>로컬 즐겨찾기/캐시</td><td>CoreData</td></tr>
+  <tr><td>Apple Sign In</td><td>로그인</td><td>(Apple Native)</td></tr>
+  <tr><td><strong>금지</strong>: Alamofire, RxSwift</td><td></td><td>Swift Concurrency로 충분</td></tr>
+</table>
+<p>처음부터 의존성은 5개 이하로 유지하세요. 라이브러리 하나가 Swift 7 호환 안 되면 발목 잡힙니다.</p>
+
+<!-- ========== 7. 서버 아키텍처 ========== -->
+<h1>7. 서버 아키텍처</h1>
+
+<h2>7-1. 단계별 진화</h2>
+<div class="ascii">[Phase 1: 0~5천 MAU]
+iOS App → Supabase (DB+Auth+EdgeFunc+Storage)
+         ↑
+         └─ Crawler (Fly.io 1 VM, $2/월)
+
+[Phase 2: 5천~5만 MAU]
+iOS App → CloudFront/CloudFlare CDN → Supabase
+         ↑                              ↑
+         │                              └─ Redis (Upstash) 캐시 레이어
+         └─ Crawler Worker (Cloud Run)
+
+[Phase 3: 5만+ MAU]
+iOS App → CDN → API Gateway
+                  ├─ Supabase (인증/RLS)
+                  ├─ NestJS API (홈피드/인기글 등 핫 패스)
+                  └─ Push Worker (별도 컨테이너, APNs HTTP/2 풀)
+                Redis Cluster + 이벤트 큐(SQS)</div>
+
+<h2>7-2. 크롤러 분리가 필수인 이유</h2>
+<p>크롤러는 <strong>DB와 같은 머신에 두면 안 됩니다.</strong></p>
+<ul>
+  <li>차단당해서 IP 바뀌어야 할 때 DB까지 영향</li>
+  <li>크롤러 죽으면 앱이 죽는 일 방지</li>
+  <li>별도 cron 스케줄링 (매시간 / 매일 새벽 3시 전체 동기화)</li>
+</ul>
+<p>Fly.io의 <code>auto_stop_machines = true</code> 옵션을 쓰면 크롤링 안 할 때는 머신이 꺼져서 월 $1~3 수준입니다.</p>
+
+<h2>7-3. 캐시 전략</h2>
+<table>
+  <tr><th>데이터</th><th>캐시 위치</th><th>TTL</th><th>이유</th></tr>
+  <tr><td>오늘 편성표</td><td>CDN + 클라이언트</td><td>10분</td><td>거의 안 바뀜, 트래픽 90%</td></tr>
+  <tr><td>드라마 메타</td><td>클라이언트(SwiftData)</td><td>1일</td><td>포스터/제목 잘 안 바뀜</td></tr>
+  <tr><td>사용자 즐겨찾기</td><td>클라이언트(SwiftData)</td><td>무한 (서버 동기)</td><td>오프라인에서도 보여야 함</td></tr>
+  <tr><td>인기글 Top 10</td><td>Redis</td><td>5분</td><td>계산 비용 큼</td></tr>
+  <tr><td>게시글 상세</td><td>CDN (비인증)</td><td>1분</td><td>새 댓글 반영 빠르게</td></tr>
+</table>
+<p><strong>오늘 편성표 1건 = 모든 사용자에게 동일</strong>입니다. 사용자 1만명이 각자 DB 쿼리하면 안 됩니다. CDN edge에서 잘라야 합니다.</p>
+
+<!-- ========== 8. 푸시 알림 ========== -->
+<h1>8. 푸시 알림 구조</h1>
+
+<h2>8-1. 가장 큰 문제: "1만 명에게 동시에 푸시 발송"</h2>
+<p>방영 시작 10분 전, 즐겨찾기 5천 명에게 동시 발송하면:</p>
+<ul>
+  <li>APNs는 HTTP/2로 stream 다중화. 한 connection으로 초당 ~1000건.</li>
+  <li>Edge Function의 timeout(30초)을 넘기기 쉬움.</li>
+  <li>실패한 토큰 재시도 필요.</li>
+</ul>
+
+<h2>8-2. 권장 구조</h2>
+<div class="ascii">[10분마다 cron]
+  ↓
+push_jobs 테이블에서 scheduled_at &lt;= now() + 30s AND status = 'PENDING' 조회
+  ↓
+배치로 1000건씩 묶어 Push Worker로 전송 (이벤트 큐)
+  ↓
+Push Worker: APNs HTTP/2 connection pool, 동시 100 streams
+  ↓
+성공: status = 'SENT'
+실패 (410 Unregistered): devices.apns_token 무효화
+실패 (다른): 재시도 큐 (max 3회)</div>
+
+<h2>8-3. 푸시 잡 미리 생성 (Pre-scheduling)</h2>
+<p>크롤러가 새 회차를 발견하면, 즉시 모든 즐겨찾기 사용자의 <code>push_jobs</code>를 미리 만들어둡니다:</p>
+<pre><code>-- 새 회차 등록 시 트리거
+insert into push_jobs (user_id, episode_id, scheduled_at, payload)
+select
+  f.user_id,
+  e.id,
+  e.air_time - interval '10 minutes',
+  jsonb_build_object(
+    'aps', jsonb_build_object(
+      'alert', jsonb_build_object(
+        'title', d.title || ' ' || e.number || '회',
+        'body', '10분 후 방영 시작!'
+      ),
+      'sound', 'default',
+      'category', 'EPISODE_AIR'
+    ),
+    'drama_id', d.id,
+    'episode_id', e.id
+  )
+from episodes e
+join dramas d on d.id = e.drama_id
+join favorites f on f.drama_id = d.id and f.notify_air = true
+where e.id = NEW.id;</code></pre>
+<p>이렇게 하면 발송 시점에는 <code>select … where scheduled_at &lt;= now()</code> 한 줄 쿼리로 끝납니다.</p>
+
+<h2>8-4. 알림 카테고리 (iOS)</h2>
+<pre><code>UNNotificationCategory(
+    identifier: "EPISODE_AIR",
+    actions: [
+        UNNotificationAction(identifier: "OPEN_DRAMA", title: "보러가기"),
+        UNNotificationAction(identifier: "SNOOZE", title: "10분 후 다시"),
+    ],
+    intentIdentifiers: []
+)</code></pre>
+<p>딥링크 페이로드(<code>drama_id</code>)로 상세 화면 직행.</p>
+
+<h2>8-5. APNs 인증</h2>
+<p><strong>.p8 키 방식 강력 추천</strong> (인증서 방식 X). 키는 1년 안 만료, 모든 앱 공유 가능. Supabase Edge Function에 환경변수로 주입.</p>
+
+<!-- ========== 9. 커뮤니티 ========== -->
+<h1>9. 커뮤니티 설계</h1>
+<p>커뮤니티는 <strong>반드시 터집니다</strong>. 다음을 처음부터 박아두세요.</p>
+
+<h2>9-1. 반드시 터지는 문제 5가지</h2>
+<table>
+  <tr><th>문제</th><th>발생 시점</th><th>대응</th></tr>
+  <tr><td><strong>스포일러 신고 폭주</strong></td><td>첫 방영 직후 30분</td><td>회차별 스포일러 토글 필수, 기본값 ON</td></tr>
+  <tr><td><strong>여혐/남혐 댓글 전쟁</strong></td><td>인기 드라마 출시 직후</td><td>신고 3회 자동 가림, 24시간 내 처리</td></tr>
+  <tr><td><strong>타팬덤 침공/평점 테러</strong></td><td>인기글 댓글창</td><td>가입 7일 미만 신규 계정 댓글 제한 옵션</td></tr>
+  <tr><td><strong>광고/도배 봇</strong></td><td>사용자 1만 돌파 직후</td><td>1분 내 3회 도배 시 자동 차단, hCaptcha</td></tr>
+  <tr><td><strong>자살/자해 게시물</strong></td><td>비주기적</td><td>키워드 자동 hide + 안내 메시지</td></tr>
+</table>
+
+<h2>9-2. 스포일러 블라인드</h2>
+<pre><code>struct PostRow: View {
+  let post: Post
+  @State private var revealed = false
+
+  var body: some View {
+    VStack(alignment: .leading) {
+      Text(post.title)
+      if post.isSpoiler && !revealed {
+        Text("🚫 스포일러 — 탭하여 보기")
+          .padding().frame(maxWidth: .infinity)
+          .background(.gray.opacity(0.3))
+          .onTapGesture { revealed = true }
+      } else {
+        Text(post.body)
+      }
+    }
+  }
+}</code></pre>
+<p>회차 정보(<code>episode_no</code>)와 함께 저장해서, <strong>"내가 본 회차 이전 스포만 보기"</strong> 옵션도 v2에서 추가 가능.</p>
+
+<h2>9-3. 인기글 점수 (Hacker News 식)</h2>
+<pre><code>hot_score = (likes - 1) / pow((age_in_hours + 2), 1.5)</code></pre>
+<ul>
+  <li>pg_cron으로 5분마다 최근 24시간 게시글 재계산</li>
+  <li><code>idx_posts_hot</code>로 인덱스 정렬</li>
+  <li>인기글 노출은 Top 20만, 그 이상은 의미 없음</li>
+</ul>
+
+<h2>9-4. 신고 자동화</h2>
+<pre><code>-- 같은 게시글에 신고 3회 누적 시 자동 hide
+create or replace function auto_hide_on_report() returns trigger as $$
+begin
+  if (select count(*) from reports
+      where target_type = NEW.target_type
+        and target_id = NEW.target_id
+        and status = 'PENDING') &gt;= 3 then
+    if NEW.target_type = 'POST' then
+      update posts set is_hidden = true where id = NEW.target_id;
+    end if;
+  end if;
+  return NEW;
+end;
+$$ language plpgsql;</code></pre>
+<p>자동 가림 후 운영자 검토 → 복원 또는 영구 삭제. Apple 가이드 1.2(UGC)는 <strong>24시간 내 처리</strong>를 요구합니다.</p>
+
+<!-- ========== 10. 데이터 수집 ========== -->
+<h1>10. 드라마 데이터 수집 전략</h1>
+<p>이 부분이 <strong>법적/기술적으로 가장 까다롭습니다.</strong></p>
+
+<h2>10-1. 데이터 소스 매트릭스</h2>
+<table>
+  <tr><th>소스</th><th>공식 API</th><th>무료</th><th>안정성</th><th>법적 리스크</th><th>추천도</th></tr>
+  <tr><td><strong>TMDB</strong></td><td>✓</td><td>✓</td><td>★★★★★</td><td>낮음 (출처 표기)</td><td>★★★★★</td></tr>
+  <tr><td><strong>KOFIC</strong> (영화)</td><td>✓</td><td>✓</td><td>★★★★</td><td>낮음</td><td>★★★</td></tr>
+  <tr><td><strong>KBS/MBC/SBS</strong></td><td>✗</td><td>-</td><td>★★</td><td><strong>중간</strong></td><td>크롤링</td></tr>
+  <tr><td><strong>tvN/JTBC</strong> (CJ ENM)</td><td>✗</td><td>-</td><td>★</td><td><strong>중간</strong></td><td>크롤링</td></tr>
+  <tr><td><strong>EPG XML</strong> (skylife 등)</td><td>일부</td><td>유료</td><td>★★★</td><td>낮음 (계약 시)</td><td>자금 있을 때</td></tr>
+  <tr><td><strong>Netflix/Disney+</strong></td><td>✗ (비공개)</td><td>-</td><td>-</td><td><strong>높음</strong></td><td>비추</td></tr>
+  <tr><td><strong>Wavve/Tving</strong></td><td>✗</td><td>-</td><td>-</td><td><strong>높음</strong></td><td>비추</td></tr>
+</table>
+
+<h2>10-2. 현실적 수집 전략 (단계별)</h2>
+<p><strong>Phase 1 (MVP):</strong> TMDB + 지상파 크롤링</p>
+<ul>
+  <li>TMDB로 드라마 메타데이터(포스터, 시놉시스, 출연진) 확보</li>
+  <li>KBS/MBC/SBS 편성표 페이지 크롤링 (HTML 파싱)</li>
+  <li>일 1회 새벽 3시 + 매시간 보정 크롤</li>
+</ul>
+<p><strong>Phase 2:</strong> + 종편/케이블</p>
+<ul>
+  <li>tvN, JTBC, ENA, 채널A 등 추가</li>
+  <li>사용자 신고 기반 보정 ("편성표 오류" 버튼)</li>
+</ul>
+<p><strong>Phase 3:</strong> OTT 확장</p>
+<ul>
+  <li>사용자가 직접 "이 드라마는 넷플릭스에서" 태깅 (UGC 보강)</li>
+  <li>Netflix는 공식 API 없음 → 크롤링은 ToS 위반 위험</li>
+</ul>
+
+<h2>10-3. 크롤러 코드 패턴 (TypeScript / Cloud Run)</h2>
+<pre><code>// crawler/src/kbs.ts
+import { chromium } from 'playwright'
+
+export async function crawlKBS(targetDate: Date) {
+  const browser = await chromium.launch({ headless: true })
+  const page = await browser.newPage({
+    userAgent: 'Mozilla/5.0 (DramaApp Crawler; contact@dramaapp.com)',
+    locale: 'ko-KR',
+  })
+
+  await page.goto(`https://program.kbs.co.kr/2tv/schedule/${formatDate(targetDate)}`)
+  await page.waitForSelector('.schedule-item', { timeout: 10000 })
+
+  const items = await page.$$eval('.schedule-item', (els) =&gt;
+    els.map(el =&gt; ({
+      time: el.querySelector('.time')?.textContent?.trim(),
+      title: el.querySelector('.title')?.textContent?.trim(),
+      episode: el.querySelector('.episode')?.textContent?.trim(),
+    }))
+  )
+
+  await browser.close()
+  return items.map(normalizeKBS)
+}</code></pre>
+
+<h2>10-4. 크롤링 차단 대응 전략</h2>
+<table>
+  <tr><th>차단 유형</th><th>대응</th></tr>
+  <tr><td><strong>User-Agent 차단</strong></td><td>정직한 UA + 연락처 명시 ("DramaApp Crawler; contact@…")</td></tr>
+  <tr><td><strong>Rate limit</strong></td><td>요청 간 2~5초 sleep, 분산 시간대</td></tr>
+  <tr><td><strong>IP 차단</strong></td><td>주거용 프록시 ($50/월) — 단, <strong>ToS 회색지대</strong></td></tr>
+  <tr><td><strong>Cloudflare 봇 차단</strong></td><td>Playwright + <code>playwright-extra-stealth</code></td></tr>
+  <tr><td><strong>JS 렌더링 필수</strong></td><td>위 동일, headless Chrome</td></tr>
+  <tr><td><strong>HTML 구조 변경</strong></td><td><strong>모니터링 alert + 빠른 패치</strong>가 더 중요</td></tr>
+</table>
+<p><strong>가장 자주 깨지는 건 차단이 아니라 HTML 구조 변경</strong>입니다. 셀렉터 깨지면 Slack/Discord webhook으로 즉시 알람. 일일 크롤링 결과를 전일 대비 ±20% 넘으면 의심.</p>
+
+<h2>10-5. 법적 리스크 정리</h2>
+<table>
+  <tr><th>항목</th><th>한국법</th><th>실무적 위험도</th></tr>
+  <tr><td>편성표 크롤링</td><td>저작권법 보호 대상 ✗ (사실 정보)</td><td>낮음</td></tr>
+  <tr><td>시놉시스 크롤링</td><td>보호 대상 ○ (창작물)</td><td><strong>중간</strong> — TMDB만 사용 권장</td></tr>
+  <tr><td>포스터 크롤링</td><td>보호 대상 ○</td><td><strong>높음</strong> — TMDB만</td></tr>
+  <tr><td>robots.txt 무시</td><td>직접적 위법 X, ToS 위반 가능</td><td>중간</td></tr>
+  <tr><td>부정경쟁방지법(2021)</td><td>"성과 도용" 조항</td><td><strong>잠재적 고위험</strong> — 대형 사업자 분쟁 시</td></tr>
+</table>
+<div class="callout-warn">
+<strong>실전 가이드라인</strong><br>
+1. <strong>편성 시간만</strong> 크롤링, 시놉시스/포스터는 <strong>TMDB API</strong>만 사용<br>
+2. <strong>robots.txt 준수</strong>, 1초당 1요청 이하<br>
+3. <strong>출처 표기</strong> ("편성 정보 제공: KBS/MBC/...")<br>
+4. 방송사가 공식 요청 시 즉시 중단할 수 있는 컨택 채널 제공<br>
+5. <strong>부정경쟁방지법 리스크</strong>: tvN 편성표만 그대로 가져와서 보여주면 위험. 자체 부가가치(즐겨찾기/알림/커뮤니티) 명확히 할 것
+</div>
+
+<!-- ========== 11. 트래픽 ========== -->
+<h1>11. 예상 트래픽 고려사항</h1>
+
+<h2>11-1. 시나리오별 추정</h2>
+<table>
+  <tr><th>지표</th><th>1천 MAU</th><th>1만 MAU</th><th>10만 MAU</th></tr>
+  <tr><td>DAU (DAU/MAU 25%)</td><td>250</td><td>2,500</td><td>25,000</td></tr>
+  <tr><td>일 세션 (2회/DAU)</td><td>500</td><td>5,000</td><td>50,000</td></tr>
+  <tr><td>API 요청/세션</td><td>20</td><td>20</td><td>20</td></tr>
+  <tr><td>일 API 요청</td><td>10,000</td><td>100,000</td><td><strong>1,000,000</strong></td></tr>
+  <tr><td>피크 RPS (3배 spike)</td><td>0.5</td><td>5</td><td><strong>50</strong></td></tr>
+  <tr><td>DB 크기</td><td>100MB</td><td>500MB</td><td>5GB</td></tr>
+  <tr><td>푸시 발송/일</td><td>1,000</td><td>10,000</td><td>100,000</td></tr>
+  <tr><td><strong>이미지 egress/월</strong></td><td>5GB</td><td>50GB</td><td><strong>500GB</strong></td></tr>
+</table>
+
+<h2>11-2. 병목 지점 예측</h2>
+<table>
+  <tr><th>MAU</th><th>첫 병목</th><th>해결</th></tr>
+  <tr><td>5천</td><td>이미지 egress 비용</td><td>CloudFlare CDN 무료 플랜 앞단</td></tr>
+  <tr><td>1만</td><td>편성표 API 캐시 미스</td><td>Edge cache 10분 TTL</td></tr>
+  <tr><td>5만</td><td>푸시 발송 동시성</td><td>큐 + Worker 분리</td></tr>
+  <tr><td>10만</td><td>Supabase 단일 인스턴스</td><td>읽기 전용 replica or 캐시 적극화</td></tr>
+  <tr><td>30만+</td><td>DB 쓰기 (게시글/좋아요)</td><td>Hot 게시글만 Redis로 카운터</td></tr>
+</table>
+
+<!-- ========== 12. 비용 ========== -->
+<h1>12. 비용 절감 전략</h1>
+
+<h2>12-1. MAU별 예상 월 비용</h2>
+<div class="ascii">[1천 MAU]   Supabase Free $0 + Fly.io $3 + CloudFlare $0 = $3/월
+[1만 MAU]   Supabase Pro $25 + Fly.io $5 + CloudFlare $0 = $30/월
+[10만 MAU]  Supabase Pro+addon $80 + Cloud Run $20 +
+            Upstash Redis $10 + CloudFlare Pro $20 +
+            APNs $0 (무료) + 모니터링 $10 = $140/월
+[100만 MAU] $1,000~2,000/월 (이 시점엔 광고/구독 수익으로 흑자)</div>
+
+<h2>12-2. 절감 포인트 (효과 큰 순)</h2>
+<ol>
+  <li><strong>이미지: 절대로 Supabase Storage egress 직접 노출 X</strong> — 앞에 CloudFlare CDN 무조건. Egress 비용이 전체의 60%를 차지함.</li>
+  <li><strong>포스터는 TMDB CDN 직링크</strong> 사용 (TMDB가 무료 CDN 제공) — Storage 비용 0</li>
+  <li><strong>편성표 캐시 TTL 길게</strong> (10분) — 같은 응답을 N명이 받아감</li>
+  <li><strong>이미지 변환은 클라이언트에서</strong> — 서버 리사이즈는 비쌈, SwiftUI <code>.resizable()</code> + Kingfisher</li>
+  <li><strong>푸시 토큰 정리</strong> — 무효 토큰 누적되면 APNs HTTP 호출 낭비. 410 응답 즉시 삭제</li>
+  <li><strong>콜드 스타트 회피</strong> — Edge Function 자주 호출되는 건 keep-alive ping</li>
+</ol>
+
+<!-- ========== 13. 수익화 ========== -->
+<h1>13. 추후 수익화 아이디어</h1>
+<table>
+  <tr><th>모델</th><th>시점</th><th>예상 수익 (10만 MAU)</th><th>리스크</th></tr>
+  <tr><td><strong>배너 광고</strong> (AdMob)</td><td>v1.1</td><td>월 $200~500</td><td>UX 저하, 4.3 리젝 가능성 낮음</td></tr>
+  <tr><td><strong>네이티브 광고</strong> (편성표 사이)</td><td>v2</td><td>월 $500~1500</td><td>잘 만들면 OK</td></tr>
+  <tr><td><strong>드라마 굿즈 제휴</strong> (쿠팡파트너스)</td><td>v2</td><td>월 $100~300</td><td>트래픽 의존</td></tr>
+  <tr><td><strong>OTT 가입 제휴</strong> (웨이브/티빙)</td><td>v2</td><td>건당 $5~10</td><td>협상 필요</td></tr>
+  <tr><td><strong>프리미엄 구독</strong> (광고 제거 + 한정 기능)</td><td>v3</td><td>$2.99/월, 전환율 2% = 월 $5,980</td><td>차별화 어려움</td></tr>
+  <tr><td><strong>드라마 굿즈 자체 판매</strong></td><td>v4+</td><td>-</td><td>운영 부담 큼</td></tr>
+  <tr><td><strong>응원 후원/도네이션</strong></td><td>v3</td><td>미미</td><td>한국 정서상 약함</td></tr>
+</table>
+<p><strong>현실 조언:</strong> 10만 MAU 전까지는 광고 수익이 운영비를 못 넘깁니다. 광고는 <em>생존 도구</em>가 아니라 <em>재투자 도구</em>로 생각하세요. 진짜 수익은 OTT 제휴/굿즈입니다.</p>
+
+<!-- ========== 14. 앱스토어 ========== -->
+<h1>14. 앱스토어 출시 시 주의사항</h1>
+
+<h2>14-1. 자주 리젝되는 항목 (이 앱 기준)</h2>
+<table>
+  <tr><th>가이드</th><th>내용</th><th>대응</th></tr>
+  <tr><td><strong>1.2 UGC</strong></td><td>UGC 앱은 (1) 신고 (2) 차단 (3) 24시간 내 처리 (4) 이용약관 동의 필수</td><td>출시 전 4종 모두 구현</td></tr>
+  <tr><td><strong>2.5.2 Code Download</strong></td><td>런타임 코드 다운로드 금지</td><td>Edge Function 응답이 <em>데이터</em>면 OK</td></tr>
+  <tr><td><strong>3.1.1 IAP</strong></td><td>디지털 콘텐츠는 IAP만</td><td>광고 제거는 IAP 필수</td></tr>
+  <tr><td><strong>4.3 Spam</strong></td><td>다른 편성표 앱과 차별화 부족 시</td><td>커뮤니티/알림으로 차별화 명시</td></tr>
+  <tr><td><strong>4.7 (한국)</strong></td><td>청소년 보호</td><td>17+ 등급 권장 (UGC)</td></tr>
+  <tr><td><strong>5.1.1 Data Collection</strong></td><td>추적 시 ATT 프롬프트 필수</td><td>AdMob 사용 시 필수</td></tr>
+  <tr><td><strong>5.1.1(v) Account Deletion</strong></td><td>2022년 6월부터 회원 탈퇴 앱 내 구현 필수</td><td>마이 화면에 명시적 버튼</td></tr>
+  <tr><td><strong>5.1.4 Kids</strong></td><td>만 13세 미만 대상 X (한국 14세 미만)</td><td>4+ 등급 시 트래킹 금지</td></tr>
+</table>
+
+<h2>14-2. 리뷰 통과 팁</h2>
+<ol>
+  <li><strong>데모 계정 제공</strong>: 로그인 필요 화면이 있으면 리뷰 노트에 Apple ID 데모 계정 명시</li>
+  <li><strong>첫 출시는 기능 최소화</strong>: 커뮤니티 빼고 편성표/즐겨찾기/알림만으로 v1.0 출시 → 4.3(spam) 리젝 가능성 줄임 + UGC 가이드 우회</li>
+  <li><strong>편성 정보 출처 명시</strong>: "방송사 공식 사이트 기반" 푸터 표기</li>
+  <li><strong>테스트 디바이스 영상 캡처</strong>: 푸시 알림 동작 영상 미리 준비</li>
+</ol>
+
+<h2>14-3. 한국 특수</h2>
+<ul>
+  <li>정보통신망법: 14세 미만 회원가입 시 법정대리인 동의 필요 → <strong>차라리 14+ 제한</strong></li>
+  <li>약관/개인정보처리방침: 한국어 + 영어 둘 다 필수</li>
+  <li>게시판 운영자 표시 의무: 마이 → 회사 정보에 운영자/연락처 명시</li>
+</ul>
+
+<!-- ========== 15. 운영 어려운 점 ========== -->
+<h1>15. 실제 서비스 운영 시 가장 어려운 점</h1>
+<p>15년 경험상 <strong>이 5개에서 99%가 죽습니다.</strong></p>
+<table>
+  <tr><th>문제</th><th>발생 빈도</th><th>1인 대응 가능?</th><th>대비책</th></tr>
+  <tr><td><strong>크롤러가 새벽에 깨짐</strong></td><td>월 2~5회</td><td>어려움</td><td>모니터링 + Slack 알림 + fallback (전일 데이터 유지)</td></tr>
+  <tr><td><strong>푸시가 안 옴 / 늦게 옴</strong></td><td>주 1회 사용자 CS</td><td>가능</td><td>발송 로그 보관 (<code>push_jobs.sent_at</code>), CS툴</td></tr>
+  <tr><td><strong>편성 시간 오류 → 폭주 CS</strong></td><td>월 1~2회</td><td>가능</td><td>"오류 신고" 버튼 + 자동 보정 워크플로우</td></tr>
+  <tr><td><strong>커뮤니티 욕설/스포 신고 폭주</strong></td><td>인기드라마 첫방 후 30분</td><td><strong>불가능</strong></td><td>자동 hide + 가입 7일 제한 + 키워드 필터</td></tr>
+  <tr><td><strong>부정경쟁/저작권 내용증명</strong></td><td>1년 1~2회</td><td>어려움</td><td>변호사 콘택트 미리, 즉시 비활성화 가능한 admin flag</td></tr>
+</table>
+<div class="callout-warn"><strong>핵심 깨달음:</strong> 코드 99%가 잘 굴러가도, 운영 1%가 무너지면 앱이 죽습니다. <strong>운영 자동화에 개발의 30%를 써야 합니다.</strong></div>
+
+<!-- ========== 16. 개발 순서 ========== -->
+<h1>16. 혼자 개발할 경우 현실적인 개발 순서</h1>
+<p><strong>경험칙:</strong> 1인 개발자는 "기능 완성도 60% × 출시 빈도 높음"이 "100% × 6개월 지연"을 이깁니다.</p>
+
+<h2>16-1. 주차별 작업</h2>
+<div class="ascii">[Week 1]
+  - Supabase 프로젝트 생성 + DB 스키마 (DDL 위 그대로 적용)
+  - TMDB API 키 발급, 채널 목록 시드
+  - Xcode 프로젝트 SwiftUI로 재구성 (스토리보드 제거)
+  - 폴더 구조 + DesignSystem 토큰
+
+[Week 2]
+  - 크롤러 1개 (KBS만) 작성, Fly.io 배포
+  - cron으로 매일 새벽 3시 실행 확인
+  - dramas/episodes 테이블에 실데이터 100건 채우기
+
+[Week 3]
+  - iOS: 편성표 화면 (날짜/채널 선택)
+  - SupabaseDramaRepository 구현
+  - 로딩/에러 상태 처리
+
+[Week 4]
+  - 즐겨찾기 (로컬 SwiftData) - 로그인 없이도 작동
+  - 드라마 상세 화면
+
+[Week 5]
+  - Apple Sign In
+  - 게스트 → 가입자 데이터 마이그레이션
+  - 즐겨찾기 서버 동기
+
+[Week 6]
+  - Push 등록 (디바이스 토큰 저장)
+  - push_jobs 트리거 작성
+  - Push Worker (Edge Function) 구현
+  - 본인 디바이스로 발송 테스트
+
+[Week 7]
+  - MBC, SBS 크롤러 추가
+  - 편성표 캐시 (CDN/Edge)
+  - 검색 기능
+
+[Week 8]
+  - 마이 화면 + 회원탈퇴
+  - 약관/개인정보처리방침 (Notion 페이지로 호스팅)
+  - TestFlight 베타 (지인 20명)
+
+[Week 9-10]
+  - 베타 피드백 반영
+  - 충돌/오류 수집 (TelemetryDeck or Sentry)
+  - 앱스토어 메타데이터 (스크린샷 6장, 설명, 키워드)
+
+[Week 11]
+  - App Store 제출 (커뮤니티 없는 v1.0)
+  - 리뷰 통과까지 평균 1~3일
+
+[Week 12]
+  - 출시 후 모니터링
+  - 사용자 100명 도달 시 → 다음 단계 (커뮤니티) 결정</div>
+
+<!-- ========== 17. 로드맵 ========== -->
+<h1>17. 3개월 개발 로드맵</h1>
+
+<h2>Month 1: "혼자 보는 드라마 캘린더" 출시 가능 수준</h2>
+<ul>
+  <li>DB + 크롤러(지상파 3사) + iOS 편성표/즐겨찾기/푸시</li>
+  <li><strong>출구 조건</strong>: 본인이 매일 쓸 수 있고, 푸시 알림이 정확함</li>
+  <li><strong>결과물</strong>: TestFlight 베타 가능한 v0.9</li>
+</ul>
+
+<h2>Month 2: 출시 & 안정화</h2>
+<ul>
+  <li>Apple Sign In, 회원 탈퇴, 약관</li>
+  <li>종편/케이블 크롤러 (tvN, JTBC, ENA)</li>
+  <li>검색, 장르 필터</li>
+  <li><strong>출구 조건</strong>: App Store 출시 + DAU 100명 + 크래시율 0.5% 이하</li>
+  <li><strong>결과물</strong>: App Store v1.0 출시</li>
+</ul>
+
+<h2>Month 3: 커뮤니티 베타 + 데이터 기반 의사결정</h2>
+<ul>
+  <li>커뮤니티 (게시판/댓글/좋아요/신고/차단/블라인드)</li>
+  <li>운영자 admin 패널 (Retool 또는 Supabase Studio + RLS bypass key)</li>
+  <li>분석 (PostHog 또는 Mixpanel 무료)</li>
+  <li><strong>출구 조건</strong>: 게시글 일 30개, 신고 자동처리 동작</li>
+  <li><strong>결과물</strong>: v1.5 커뮤니티 활성화</li>
+</ul>
+
+<blockquote>
+<strong>3개월 후 의사결정 분기점</strong><br>
+• DAU 300명 미만 → 마케팅 + 차별화 기능 (커뮤니티 강화)<br>
+• DAU 1000명 이상 → 광고 도입 + 인프라 확장
+</blockquote>
+
+<!-- ========== 18. 확장 구조 ========== -->
+<h1>18. 확장 가능한 구조 설계 방법</h1>
+<p>지금 안 해도 되지만, <strong>나중에 갈아엎지 않으려면 처음부터 지킬 5가지</strong>:</p>
+
+<h2>18-1. 인터페이스로 끊어둘 곳</h2>
+<pre><code>// 처음부터 프로토콜로 정의
+protocol DramaRepository {
+  func schedule(date: Date, channelIds: [UUID]?) async throws -> [Episode]
+  func toggleFavorite(dramaId: UUID) async throws -> Bool
+}
+
+// MVP 구현
+final class SupabaseDramaRepository: DramaRepository { ... }
+
+// 나중에 NestJS로 교체 시
+final class NestJSDramaRepository: DramaRepository { ... }
+// ViewModel은 한 줄도 안 바뀜</code></pre>
+
+<h2>18-2. 도메인 이벤트 (나중에 큐로)</h2>
+<pre><code>// 지금은 함수 직접 호출
+async function onEpisodeCreated(episode) {
+  await scheduleNotifications(episode)
+  await invalidateCache(episode.dramaId)
+}
+
+// 사용자 많아지면 이벤트 버스(SQS/Pub-Sub)로 분리
+await eventBus.publish('episode.created', { episodeId: episode.id })</code></pre>
+<p>이벤트 이름을 처음부터 명사+과거형(<code>episode.created</code>)으로 잡아두면 그대로 큐로 옮길 수 있습니다.</p>
+
+<h2>18-3. Feature Flag 처음부터</h2>
+<pre><code>enum FeatureFlag {
+  static var communityEnabled: Bool {
+    RemoteConfig.shared.bool("community_enabled", default: false)
+  }
+}</code></pre>
+<p>서버 사이드(<code>app_config</code> 테이블)에 토글을 두고, 앱 업데이트 없이 기능을 끌 수 있어야 합니다. <strong>커뮤니티가 터졌을 때 30초 안에 잠가야 합니다.</strong></p>
+
+<h2>18-4. 멀티 채널 → 멀티 국가 확장</h2>
+<p><code>channels.type</code>을 <code>'BROADCAST'|'OTT'</code>로 시작했지만, <code>country_code</code> 컬럼을 처음부터 추가하세요. 일본/대만 드라마 시장은 다음 단계 시장입니다.</p>
+
+<h2>18-5. 모듈화 타이밍</h2>
+<div class="ascii">[Phase 1] 단일 앱 타겟 (현재)
+[Phase 2] WidgetKit Extension (오늘 편성 위젯) → Shared/ 모듈 분리
+[Phase 3] watchOS 앱 → Domain 패키지 SPM 분리
+[Phase 4] 빌드 시간 3분 초과 → Feature별 SPM 패키지</div>
+<p><strong>Domain 폴더의 모델/리포지토리 프로토콜은 Foundation 외 import를 금지</strong>하세요. 이게 미래의 모듈화를 가능하게 합니다.</p>
+
+<!-- ========== 19. 최종 요약 ========== -->
+<h1>19. 최종 요약 — "오늘 당장 할 일"</h1>
+<ol>
+  <li><strong><code>DramaApp.xcodeproj</code>를 SwiftUI로 재구성</strong>: 스토리보드 제거, <code>@main DramaAppApp</code> 생성, 탭 5개 골격</li>
+  <li><strong>Supabase 프로젝트 생성</strong> (Seoul 리전), 위 DDL 그대로 적용</li>
+  <li><strong>TMDB API 키 발급</strong> (무료)</li>
+  <li><strong><code>channels</code> 테이블 시드</strong>: KBS2, MBC, SBS, tvN, JTBC 5개</li>
+  <li><strong><code>DramaRepository</code> 프로토콜</strong> 먼저 정의, Mock 구현으로 UI부터</li>
+</ol>
+<p>여기까지가 <strong>첫 주 작업</strong>입니다.</p>
+
+<hr>
+
+<h2>가장 강조하고 싶은 3가지</h2>
+<ol>
+  <li><strong>혼자 만들 수 있는 가장 큰 차별화는 "정확한 푸시 알림"입니다.</strong> 편성표만 있는 앱은 많지만 알림이 정확하지 않습니다. 여기에 1주를 더 써도 됩니다.</li>
+  <li><strong>커뮤니티를 너무 빨리 열지 마세요.</strong> 사용자 1만 명 이하에서 게시판은 죽은 공간이고, 죽은 공간은 앱의 평판을 깎습니다.</li>
+  <li><strong>크롤러 모니터링이 앱 코드보다 중요합니다.</strong> 새벽에 크롤러가 깨지면 사용자 1만 명이 동시에 잘못된 알림을 받습니다. Slack webhook 알림은 1일차에 박으세요.</li>
+</ol>
+
+<hr>
+<p style="text-align: center; color: #6b7280; font-size: 9pt; margin-top: 40px;">
+DramaApp Architecture Document · 2026-05-24<br>
+1인 개발 시작 → 1년 내 10만 MAU 시나리오 기반
+</p>
+
+</body>
+</html>

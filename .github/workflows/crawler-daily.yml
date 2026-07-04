@@ -1,0 +1,47 @@
+name: Crawler · daily delta
+
+# 매일 KST 03:00 (UTC 18:00 전날) 최근 90일 첫방작만 훑음. ~3~5분.
+# workflow_dispatch: 수동 실행 (GitHub Actions UI → Run workflow) 도 지원.
+on:
+  schedule:
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+
+# 이전 실행이 아직 돌고 있으면 새 실행을 큐에만 넣음 (겹치기 방지).
+concurrency:
+  group: crawler
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: crawler
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: crawler/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Compute delta start date (90 days ago, UTC)
+        id: date
+        run: echo "start=$(date -u -d '90 days ago' +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Run crawler
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TMDB_BEARER_TOKEN: ${{ secrets.TMDB_BEARER_TOKEN }}
+          CRAWL_START_DATE: ${{ steps.date.outputs.start }}
+          CRAWL_MAX_PAGES: '15'
+        run: npm start
