@@ -21,12 +21,11 @@ struct ScheduleView: View {
     }
 
     private func toggleFavorite(_ drama: Drama) {
-        if let existing = allFavorites.first(where: { $0.dramaId == drama.id }) {
-            modelContext.delete(existing)
-        } else {
-            modelContext.insert(FavoriteDrama(drama: drama))
+        // 로컬 SwiftData + (로그인 시) Supabase 양쪽에 반영.
+        let willBeFavorite = !allFavorites.contains { $0.dramaId == drama.id }
+        Task {
+            await deps.favoritesService.setFavorite(willBeFavorite, drama: drama, in: modelContext)
         }
-        try? modelContext.save()
     }
 
     var body: some View {
@@ -280,5 +279,5 @@ private struct ScheduleRow: View {
 
 #Preview {
     ScheduleView()
-        .environment(AppDependencies(repository: MockDramaRepository()))
+        .environment(AppDependencies.preview())
 }

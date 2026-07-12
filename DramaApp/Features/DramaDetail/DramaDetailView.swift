@@ -68,12 +68,11 @@ struct DramaDetailView: View {
     // MARK: - Favorite toggle
 
     private func toggleFavorite() {
-        if let existing = matchingFavorites.first {
-            modelContext.delete(existing)
-        } else {
-            modelContext.insert(FavoriteDrama(drama: drama))
+        // 로컬 + (로그인 시) Supabase 양쪽에 반영.
+        let willBeFavorite = !isFavorited
+        Task {
+            await deps.favoritesService.setFavorite(willBeFavorite, drama: drama, in: modelContext)
         }
-        try? modelContext.save()
     }
 
     // MARK: - 다시보기 (OTT)
@@ -228,17 +227,21 @@ private struct CastAvatar: View {
             AsyncImage(url: member.person.profileURL) { phase in
                 switch phase {
                 case .success(let img):
-                    img.resizable().scaledToFill()
+                    img.resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 80, height: 120)
+                        .clipShape(RoundedRectangle(cornerRadius: AppCornerRadius.sm))
                 default:
                     ZStack {
-                        Circle().fill(AppColors.cardBackground)
+                        RoundedRectangle(cornerRadius: AppCornerRadius.sm)
+                            .fill(AppColors.cardBackground)
                         Image(systemName: "person.fill")
                             .foregroundStyle(.secondary)
                     }
+                    .frame(width: 80, height: 120)
                 }
             }
-            .frame(width: 72, height: 72)
-            .clipShape(Circle())
+            .frame(width: 80, height: 120)
 
             Text(member.person.name)
                 .font(.caption)
@@ -250,7 +253,7 @@ private struct CastAvatar: View {
                     .lineLimit(1)
             }
         }
-        .frame(width: 84)
+        .frame(width: 96)
     }
 }
 
@@ -269,6 +272,6 @@ private struct CastAvatar: View {
             endDate: nil,
             tmdbId: nil
         ))
-        .environment(AppDependencies(repository: MockDramaRepository()))
+        .environment(AppDependencies.preview())
     }
 }

@@ -169,6 +169,6 @@ private struct DramaSearchRow: View {
 
 #Preview {
     SearchView()
-        .environment(AppDependencies(repository: MockDramaRepository()))
+        .environment(AppDependencies.preview())
         .modelContainer(for: FavoriteDrama.self, inMemory: true)
 }

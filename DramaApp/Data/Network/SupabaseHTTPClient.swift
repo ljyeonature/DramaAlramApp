@@ -1,35 +1,100 @@
 import Foundation
 
 /// Supabase PostgREST 호출용 얇은 HTTP 클라이언트.
-/// Auth 추가될 때(Week 5+) Bearer 토큰 주입 메서드만 늘면 됨.
+/// - apikey 헤더는 항상 anon 키(공개용) 사용.
+/// - Authorization 헤더는 tokenProvider 가 주는 토큰. 로그인 상태면 유저 access_token, 아니면 anon.
+///   → RLS 정책이 auth.uid() 기반이라 유저 토큰이 없으면 favorites 등 개인 데이터는 접근 불가.
 final class SupabaseHTTPClient: Sendable {
+    typealias TokenProvider = @Sendable () async -> String
+
     private let baseURL: URL
-    private let anonKey: String
+    private let apiKey: String
+    private let tokenProvider: TokenProvider
     private let session: URLSession
 
-    init(baseURL: URL, anonKey: String, session: URLSession = .shared) {
+    init(
+        baseURL: URL,
+        apiKey: String,
+        tokenProvider: @escaping TokenProvider,
+        session: URLSession = .shared
+    ) {
         self.baseURL = baseURL
-        self.anonKey = anonKey
+        self.apiKey = apiKey
+        self.tokenProvider = tokenProvider
         self.session = session
     }
 
-    /// `/rest/v1/<path>?<queryItems>` 에 GET. JSON 디코드 결과 반환.
+    // MARK: - GET
+
     func get<T: Decodable>(
         _ path: String,
         queryItems: [URLQueryItem] = [],
         as type: T.Type = T.self
     ) async throws -> T {
+        let request = try await makeRequest(method: "GET", path: path, queryItems: queryItems, body: nil, prefer: nil)
+        let (data, http) = try await execute(request)
+        try validate(http: http, data: data)
+        do {
+            return try Self.decoder.decode(T.self, from: data)
+        } catch {
+            throw APIError.decoding(error)
+        }
+    }
+
+    // MARK: - POST (upsert / insert)
+
+    /// on_conflict 파라미터가 있으면 UPSERT 로 동작. Prefer 헤더로 resolution 지정.
+    func post<Body: Encodable>(
+        _ path: String,
+        body: Body,
+        queryItems: [URLQueryItem] = [],
+        prefer: String = "return=minimal"
+    ) async throws {
+        let request = try await makeRequest(
+            method: "POST", path: path, queryItems: queryItems,
+            body: try Self.encoder.encode(body), prefer: prefer
+        )
+        let (data, http) = try await execute(request)
+        try validate(http: http, data: data)
+    }
+
+    // MARK: - DELETE
+
+    func delete(_ path: String, queryItems: [URLQueryItem]) async throws {
+        let request = try await makeRequest(
+            method: "DELETE", path: path, queryItems: queryItems, body: nil, prefer: "return=minimal"
+        )
+        let (data, http) = try await execute(request)
+        try validate(http: http, data: data)
+    }
+
+    // MARK: - 공통
+
+    private func makeRequest(
+        method: String,
+        path: String,
+        queryItems: [URLQueryItem],
+        body: Data?,
+        prefer: String?
+    ) async throws -> URLRequest {
         let url = try makeURL(path: path, queryItems: queryItems)
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue(anonKey, forHTTPHeaderField: "apikey")
-        request.setValue("Bearer \(anonKey)", forHTTPHeaderField: "Authorization")
+        request.httpMethod = method
+        request.setValue(apiKey, forHTTPHeaderField: "apikey")
+        let token = await tokenProvider()
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        // URLSession 기본 캐시 우회 — Supabase가 캐시 헤더를 안 주지만 안전망.
-        // 크롤러 재실행 후 즉시 새 데이터가 반영되어야 UX 자연스러움.
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let prefer { request.setValue(prefer, forHTTPHeaderField: "Prefer") }
+        if let body { request.httpBody = body }
+        // 캐시 우회 — 크롤러 반영 즉시 확인 가능하도록.
         request.cachePolicy = .reloadIgnoringLocalCacheData
+        return request
+    }
 
-        let (data, response): (Data, URLResponse)
+    private func execute(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let data: Data
+        let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
         } catch {
@@ -38,14 +103,13 @@ final class SupabaseHTTPClient: Sendable {
         guard let http = response as? HTTPURLResponse else {
             throw APIError.httpStatus(code: -1, body: "no response")
         }
+        return (data, http)
+    }
+
+    private func validate(http: HTTPURLResponse, data: Data) throws {
         guard (200..<300).contains(http.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? ""
             throw APIError.httpStatus(code: http.statusCode, body: body)
-        }
-        do {
-            return try Self.decoder.decode(T.self, from: data)
-        } catch {
-            throw APIError.decoding(error)
         }
     }
 
@@ -63,7 +127,8 @@ final class SupabaseHTTPClient: Sendable {
         return url
     }
 
-    /// PostgREST는 ISO 8601 타임스탬프(+TZ 또는 Z) 사용. 일부 date-only 컬럼도 있어 다단 시도.
+    // MARK: - 코덱
+
     static let decoder: JSONDecoder = {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .custom { decoder in
@@ -84,6 +149,17 @@ final class SupabaseHTTPClient: Sendable {
             )
         }
         return d
+    }()
+
+    static let encoder: JSONEncoder = {
+        let e = JSONEncoder()
+        // Supabase 컬럼은 snake_case — 각 요청 페이로드가 CodingKeys 로 매핑되므로 강제 변환은 안 함.
+        // ISO8601 (fractional 포함) 로 통일.
+        e.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(SupabaseHTTPClient.isoFractional.string(from: date))
+        }
+        return e
     }()
 
     private static let dateOnlyFormatter: DateFormatter = {

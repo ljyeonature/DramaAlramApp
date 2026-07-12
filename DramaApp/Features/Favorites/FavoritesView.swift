@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct FavoritesView: View {
+    @Environment(AppDependencies.self) private var deps
     @Environment(\.modelContext) private var modelContext
 
     @Query(sort: \FavoriteDrama.addedAt, order: .reverse)
@@ -45,10 +46,13 @@ struct FavoritesView: View {
     }
 
     private func deleteFavorites(at offsets: IndexSet) {
-        for index in offsets {
-            modelContext.delete(favorites[index])
+        // FavoritesService 로 위임해서 로그인 시 서버에서도 함께 삭제.
+        let targets = offsets.map { favorites[$0].toDrama() }
+        Task {
+            for drama in targets {
+                await deps.favoritesService.setFavorite(false, drama: drama, in: modelContext)
+            }
         }
-        try? modelContext.save()
     }
 }
 
@@ -124,5 +128,6 @@ private struct FavoriteRow: View {
 
 #Preview {
     FavoritesView()
+        .environment(AppDependencies())
         .modelContainer(for: FavoriteDrama.self, inMemory: true)
 }

@@ -77,9 +77,11 @@ DramaApp/
 │   │   └── Profile/                   # placeholder
 │   ├── Domain/Models/                 # Drama, Episode, Channel, Person, CastMember
 │   ├── Data/
-│   │   ├── Repositories/              # DramaRepository 프로토콜 + Mock/Supabase 구현
+│   │   ├── Repositories/              # DramaRepository + FavoritesService (로컬↔서버)
+│   │   ├── Auth/                      # AuthStore, SupabaseAuthClient, OAuthFlow, Keychain
 │   │   ├── Network/                   # SupabaseHTTPClient, SupabaseConfig
 │   │   └── Local/                     # FavoriteDrama (SwiftData 모델)
+│   ├── DramaApp.entitlements          # (빈 dict — Xcode 재추가 방지용)
 │   └── DesignSystem/                  # AppColors/Typography/Spacing 토큰
 ├── DramaApp.xcodeproj/
 ├── crawler/                           # TMDB → Supabase 배치
@@ -98,12 +100,16 @@ DramaApp/
 │   └── migrations/
 │       ├── 001_unique_tmdb_id.sql
 │       ├── 002_persons_and_casts.sql
-│       └── 003_drama_availability.sql
+│       ├── 003_drama_availability.sql
+│       └── 004_auth_bridge.sql        # auth.users → public.users 자동 브릿지 트리거
 ├── .github/workflows/
 │   ├── crawler-daily.yml              # 매일 KST 03:00
 │   └── crawler-weekly.yml             # 매주 일요일 04:00
 ├── DramaApp_Architecture.pdf          # 전체 설계 문서
 ├── WEEK1_SETUP.md                     # 초기 세팅 상세 가이드
+├── WEEK5_SETUP.md                     # 로그인 + 즐겨찾기 동기화 세팅
+├── WEEK5_GOOGLE_SETUP.md              # Google OAuth 상세 (Cloud Console + Supabase)
+├── WORKLOG_YYYY-MM-DD.md              # 날짜별 작업 로그
 └── CLAUDE.md                          # Claude Code용 프로젝트 노트
 ```
 
@@ -112,11 +118,13 @@ DramaApp/
 ## 데이터 모델 요약
 
 ```
-users ──< favorites >── dramas ──< episodes
-                          │
-                          ├──< drama_casts >── persons
-                          └──< drama_availability >── channels
-                                                        (본방 + OTT 다시보기)
+auth.users ─┐ (Supabase Auth · Google OAuth)
+            │  1:1 (trigger handle_new_auth_user)
+public.users ──< favorites >── dramas ──< episodes
+                                 │
+                                 ├──< drama_casts >── persons
+                                 └──< drama_availability >── channels
+                                                               (본방 + OTT 다시보기)
 ```
 
 - **`dramas.status`**: `UPCOMING` · `ON_AIR` · `ENDED` — TMDB status에서 매핑
@@ -124,6 +132,8 @@ users ──< favorites >── dramas ──< episodes
 - **`drama_availability`**: M:N. "이 드라마를 볼 수 있는 채널" 의 single source of truth
 - **`push_jobs`**: 방영 10분 전 알림 큐 (Week 6+ 구현 예정)
 - 모든 테이블 RLS 활성화. 공개 읽기(`select`)는 허용, 쓰기는 로그인 사용자만
+- **`auth.users` → `public.users` 브릿지**: OAuth 로그인 시 `handle_new_auth_user` 트리거가
+  `public.users` 에 동일 `id` 로 자동 삽입. RLS 정책 `auth.uid() = user_id` 가 favorites 에서 그대로 동작
 
 ---
 
@@ -144,7 +154,11 @@ users ──< favorites >── dramas ──< episodes
    supabase/migrations/001_unique_tmdb_id.sql
    supabase/migrations/002_persons_and_casts.sql
    supabase/migrations/003_drama_availability.sql
+   supabase/migrations/004_auth_bridge.sql
    ```
+4. Authentication → **Providers → Google** 활성화 + Client ID/Secret 등록
+   → 자세한 절차는 [`WEEK5_GOOGLE_SETUP.md`](./WEEK5_GOOGLE_SETUP.md)
+5. Authentication → **URL Configuration → Redirect URLs** 에 `dramaapp://auth-callback` 추가
 
 ### 2) TMDB API 토큰
 
@@ -299,7 +313,7 @@ protocol DramaRepository: Sendable {
 | 2 | TMDB 크롤러 (드라마/회차/출연/OTT availability) | ✅ |
 | 3 | SupabaseDramaRepository, 편성표 실데이터, 상세 화면 | ✅ |
 | 4 | 즐겨찾기 (SwiftData), 리스트 내 하트 토글 | ✅ |
-| 5 | Apple Sign In, 게스트 → 사용자 마이그레이션, 서버 sync | ⏳ 다음 |
+| 5 | Google OAuth (ASWebAuth + Supabase PKCE), 로컬↔서버 즐겨찾기 sync | ✅ 코드 · ⏳ 대시보드 설정 대기 |
 | 6 | 푸시 알림 (APNs, `push_jobs` 워커) | 예정 |
 | 7 | 정밀 방영 시간 크롤 (방송사 직접), 홈피드 | 예정 |
 | 8 | 마이 페이지, 회원탈퇴, 약관, TestFlight | 예정 |
@@ -313,5 +327,9 @@ protocol DramaRepository: Sendable {
 
 - [`DramaApp_Architecture.pdf`](./DramaApp_Architecture.pdf) — 전체 설계, DB, API, 비용, 리스크, 수익화
 - [`WEEK1_SETUP.md`](./WEEK1_SETUP.md) — 초기 셋업 상세 (Supabase/TMDB 계정 발급 스크린 단위)
+- [`WEEK5_SETUP.md`](./WEEK5_SETUP.md) — 로그인 + 즐겨찾기 동기화 인프라 세팅
+- [`WEEK5_GOOGLE_SETUP.md`](./WEEK5_GOOGLE_SETUP.md) — Google OAuth 대시보드 설정 (Cloud Console + Supabase)
 - [`CLAUDE.md`](./CLAUDE.md) — Claude Code 작업 시 알아야 할 프로젝트 관례
 - [`crawler/README.md`](./crawler/README.md) — 크롤러 상세 (스크립트 옵션, 트러블슈팅)
+
+작업 로그: `WORKLOG_YYYY-MM-DD.md` 형식으로 날짜별 누적 (최신부터 확인).
