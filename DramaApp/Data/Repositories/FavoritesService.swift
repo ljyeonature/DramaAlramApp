@@ -48,9 +48,9 @@ final class FavoritesService {
     // MARK: - 로컬 CRUD
 
     private func addLocal(_ drama: Drama, in context: ModelContext) {
-        // 중복 방지: 이미 있으면 no-op.
+        // 중복 방지: 이미 있으면 no-op (기존 ownerUserId 유지 — 게스트 origin 보존 목적).
         if isFavorite(dramaId: drama.id, in: context) { return }
-        context.insert(FavoriteDrama(drama: drama))
+        context.insert(FavoriteDrama(drama: drama, ownerUserId: authStore.session?.userId))
     }
 
     private func removeLocal(dramaId: UUID, in context: ModelContext) {
@@ -127,16 +127,27 @@ final class FavoritesService {
                 )
             }
 
-            // 3) 서버 → 로컬
+            // 3) 서버 → 로컬 (계정 소유로 마킹)
             for row in serverRows where !localIds.contains(row.dramaId) {
                 if let d = row.drama?.toDrama() {
-                    context.insert(FavoriteDrama(drama: d))
+                    context.insert(FavoriteDrama(drama: d, ownerUserId: userIdString))
                 }
             }
             try? context.save()
         } catch {
             print("[FavoritesService] syncFromServer 실패 — \(error)")
         }
+    }
+
+    /// 로그아웃 시 호출 — 계정 소유(ownerUserId != nil) 즐겨찾기만 로컬에서 제거.
+    /// 게스트 상태(nil owner)에서 추가한 항목은 보존.
+    func clearOwnedFavorites(in context: ModelContext) {
+        let descriptor = FetchDescriptor<FavoriteDrama>(
+            predicate: #Predicate { $0.ownerUserId != nil }
+        )
+        guard let owned = try? context.fetch(descriptor) else { return }
+        for fav in owned { context.delete(fav) }
+        try? context.save()
     }
 }
 

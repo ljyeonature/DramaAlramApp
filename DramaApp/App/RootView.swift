@@ -24,9 +24,13 @@ struct RootView: View {
         }
         // 앱 부팅 시 세션이 살아있으면 서버와 즐겨찾기 재정합.
         .task { await deps.favoritesService.syncFromServer(in: modelContext) }
-        // 로그인/로그아웃 시 트리거 — 로그인 직후 로컬 → 서버 업로드 + 서버 → 로컬 다운로드.
-        .onChange(of: deps.authStore.isSignedIn) { _, _ in
-            Task { await deps.favoritesService.syncFromServer(in: modelContext) }
+        // 로그인 → 서버와 병합. 로그아웃 → 계정 소유 즐겨찾기 로컬에서 제거 (게스트 origin 은 보존).
+        .onChange(of: deps.authStore.isSignedIn) { _, isNowSignedIn in
+            if isNowSignedIn {
+                Task { await deps.favoritesService.syncFromServer(in: modelContext) }
+            } else {
+                deps.favoritesService.clearOwnedFavorites(in: modelContext)
+            }
         }
     }
 }

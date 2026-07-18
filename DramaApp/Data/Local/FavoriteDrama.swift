@@ -20,8 +20,12 @@ final class FavoriteDrama {
     var addedAt: Date
     var notifyAir: Bool
     var notifyNewEpisode: Bool
+    /// 추가 시점의 소유자. nil = 게스트(로그아웃 상태)에서 추가.
+    /// 로그아웃 시 non-nil 만 삭제 — 게스트 데이터는 보존.
+    /// 한 번 정해지면 mutate 하지 않음 (게스트 origin 유지).
+    var ownerUserId: String?
 
-    init(drama: Drama) {
+    init(drama: Drama, ownerUserId: String? = nil) {
         self.dramaId = drama.id
         self.title = drama.title
         self.titleEn = drama.titleEn
@@ -36,6 +40,7 @@ final class FavoriteDrama {
         self.addedAt = Date()
         self.notifyAir = true
         self.notifyNewEpisode = true
+        self.ownerUserId = ownerUserId
     }
 
     var posterURL: URL? {
