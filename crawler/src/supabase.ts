@@ -72,6 +72,25 @@ export async function getAirTimeOverride(
   return { hour: data.air_hour_kst as number, minute: data.air_minute_kst as number | null };
 }
 
+/**
+ * 드라마별 방영시간 오버라이드 세팅. Naver 크롤에서 추출한 값을 영속화.
+ * 이후 실행에선 getAirTimeOverride 로 그대로 재사용 → Naver 재조회 스킵.
+ */
+export async function setAirTimeOverride(
+  client: SupabaseClient,
+  dramaId: string,
+  hour: number,
+  minute: number
+): Promise<void> {
+  const { error } = await client
+    .from('dramas')
+    .update({ air_hour_kst: hour, air_minute_kst: minute })
+    .eq('id', dramaId);
+  if (error) {
+    console.warn(`    ⚠ air time override 저장 실패 (${dramaId}): ${error.message}`);
+  }
+}
+
 /** 회차 일괄 upsert. (drama_id, number) 기준 충돌 시 갱신. */
 export async function upsertEpisodes(
   client: SupabaseClient,

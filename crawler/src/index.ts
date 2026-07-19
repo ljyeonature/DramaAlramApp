@@ -18,7 +18,9 @@ import {
   upsertDramaCasts,
   upsertAvailability,
   getAirTimeOverride,
+  setAirTimeOverride,
 } from './supabase.js';
+import { fetchNaverAirTime } from './naver.js';
 import {
   pickChannelCode,
   toDramaRow,
@@ -123,7 +125,21 @@ async function main(): Promise<void> {
           const seasonDetail = await getSeasonDetail(tmdbToken, detail.id, 1);
           const defaultRuntime = detail.episode_run_time[0] ?? 70;
           // 드라마별 시간 오버라이드가 세팅돼 있으면 채널 기본값 대신 사용.
-          const override = await getAirTimeOverride(client, dramaId);
+          // 세팅 안 돼 있으면 Naver 검색으로 자동 추출 시도 후 영속화.
+          let override = await getAirTimeOverride(client, dramaId);
+          if (!override) {
+            const naver = await fetchNaverAirTime(detail.name);
+            if (naver) {
+              await setAirTimeOverride(client, dramaId, naver.hour, naver.minute);
+              override = { hour: naver.hour, minute: naver.minute };
+              const mm = String(naver.minute).padStart(2, '0');
+              console.log(
+                `    ⏰ Naver 방영시간 → ${naver.hour}:${mm}  (raw: "${naver.raw}")`
+              );
+            }
+            // Naver 실패해도 크롤은 계속 진행. 채널 기본값 fallback.
+            await new Promise((r) => setTimeout(r, 300)); // rate limit
+          }
           const epRows = toEpisodeRows(
             seasonDetail.episodes,
             dramaId,
