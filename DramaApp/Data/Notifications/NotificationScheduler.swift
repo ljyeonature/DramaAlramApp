@@ -129,6 +129,37 @@ final class NotificationScheduler {
         }
     }
 
+    // MARK: - Debug helpers
+
+    /// 예약된 알림 요약 로그 — Xcode 콘솔에서 확인.
+    func dumpPending() async {
+        let requests = await center.pendingNotificationRequests()
+        print("[NotificationScheduler] pending=\(requests.count)")
+        for r in requests {
+            let trig = (r.trigger as? UNCalendarNotificationTrigger)?.nextTriggerDate()
+            print("  · \(r.identifier) → \(trig?.description ?? "?")  \"\(r.content.body)\"")
+        }
+    }
+
+    /// 방출 확인용 — 지금 시각 + `after` 초 뒤 즉시 로컬 알림 하나 발송.
+    func fireTest(after seconds: TimeInterval = 5) async {
+        guard await isAuthorized() else {
+            print("[NotificationScheduler] 테스트 실패 — 권한 없음")
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = "테스트 알림"
+        content.body = "\(Int(seconds))초 뒤 도착한 로컬 알림입니다."
+        content.sound = .default
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "debug-test-\(UUID().uuidString)",
+            content: content,
+            trigger: trigger
+        )
+        try? await center.add(request)
+    }
+
     // MARK: - Identifier helpers
 
     /// `"drama-{uuid}-ep-{uuid}"` — 드라마 단위 취소 시 prefix 매칭.

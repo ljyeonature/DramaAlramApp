@@ -29,12 +29,20 @@ const DEFAULT_SLOTS: Record<string, AirSlot> = {
   TVING:        { hour: 20, minute: 0 },
 };
 
-/** 'YYYY-MM-DD' (KST 방영일) → ISO UTC timestamp */
+/**
+ * 'YYYY-MM-DD' (KST 방영일) → ISO UTC timestamp
+ * @param override 드라마별 오버라이드 슬롯. 있으면 채널 기본값 대신 사용 (`dramas.air_hour_kst` / `air_minute_kst`).
+ */
 export function estimateAirTimeUTC(
   airDateKST: string,
-  channelCode: string
+  channelCode: string,
+  override?: Partial<AirSlot> | null
 ): string {
-  const slot = DEFAULT_SLOTS[channelCode] ?? { hour: 22, minute: 0 };
+  const base = DEFAULT_SLOTS[channelCode] ?? { hour: 22, minute: 0 };
+  const slot: AirSlot = {
+    hour: override?.hour ?? base.hour,
+    minute: override?.minute ?? base.minute,
+  };
   // KST = UTC+9. air_date가 2026-05-24 22:00 KST 라면 UTC는 2026-05-24 13:00.
   const utcHour = slot.hour - 9;
   // utcHour < 0 이면 전날 UTC가 됨 (예: 06:00 KST = 21:00 UTC 전날).

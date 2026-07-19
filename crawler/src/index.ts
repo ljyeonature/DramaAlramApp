@@ -17,6 +17,7 @@ import {
   upsertPersonsAndGetIDs,
   upsertDramaCasts,
   upsertAvailability,
+  getAirTimeOverride,
 } from './supabase.js';
 import {
   pickChannelCode,
@@ -121,11 +122,14 @@ async function main(): Promise<void> {
         if (season1 && season1.episode_count > 0) {
           const seasonDetail = await getSeasonDetail(tmdbToken, detail.id, 1);
           const defaultRuntime = detail.episode_run_time[0] ?? 70;
+          // 드라마별 시간 오버라이드가 세팅돼 있으면 채널 기본값 대신 사용.
+          const override = await getAirTimeOverride(client, dramaId);
           const epRows = toEpisodeRows(
             seasonDetail.episodes,
             dramaId,
             channelCode,
-            defaultRuntime
+            defaultRuntime,
+            override
           );
           epCount = await upsertEpisodes(client, epRows);
           totalEpisodes += epCount;

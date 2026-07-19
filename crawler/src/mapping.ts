@@ -121,14 +121,18 @@ export function toEpisodeRows(
   episodes: TMDBEpisode[],
   dramaId: string,
   channelCode: string,
-  defaultRuntime: number
+  defaultRuntime: number,
+  override?: { hour: number | null; minute: number | null } | null
 ): EpisodeRow[] {
+  const slotOverride = override && override.hour != null
+    ? { hour: override.hour, minute: override.minute ?? 0 }
+    : null;
   return episodes
     .filter((ep) => ep.air_date) // 방영일 없는 회차는 스킵 (예고편 등)
     .map((ep) => ({
       drama_id: dramaId,
       number: ep.episode_number,
-      air_time: estimateAirTimeUTC(ep.air_date!, channelCode),
+      air_time: estimateAirTimeUTC(ep.air_date!, channelCode, slotOverride),
       duration_min: ep.runtime ?? defaultRuntime,
       is_special: ep.season_number === 0, // 시즌 0은 스페셜/예고
     }));

@@ -54,6 +54,24 @@ export async function upsertDrama(
   return data.id as string;
 }
 
+/**
+ * 드라마별 방영시간 오버라이드(air_hour_kst / air_minute_kst) 조회.
+ * migration 005 로 추가된 컬럼. 값이 있으면 채널 기본 슬롯 대신 사용.
+ */
+export async function getAirTimeOverride(
+  client: SupabaseClient,
+  dramaId: string
+): Promise<{ hour: number | null; minute: number | null } | null> {
+  const { data, error } = await client
+    .from('dramas')
+    .select('air_hour_kst, air_minute_kst')
+    .eq('id', dramaId)
+    .single();
+  if (error) return null;
+  if (data.air_hour_kst == null) return null;
+  return { hour: data.air_hour_kst as number, minute: data.air_minute_kst as number | null };
+}
+
 /** 회차 일괄 upsert. (drama_id, number) 기준 충돌 시 갱신. */
 export async function upsertEpisodes(
   client: SupabaseClient,

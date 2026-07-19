@@ -81,6 +81,15 @@ struct ProfileView: View {
             Text("즐겨찾기한 드라마의 방영 \(NotificationScheduler.leadMinutes)분 전 알림이 도착합니다.")
                 .font(AppTypography.caption)
                 .foregroundStyle(.secondary)
+
+            if notificationStatus == .authorized || notificationStatus == .provisional {
+                Button("테스트 알림 (5초 뒤)") {
+                    Task { await deps.notificationScheduler.fireTest(after: 5) }
+                }
+                Button("예약된 알림 콘솔 출력") {
+                    Task { await deps.notificationScheduler.dumpPending() }
+                }
+            }
         }
     }
 
