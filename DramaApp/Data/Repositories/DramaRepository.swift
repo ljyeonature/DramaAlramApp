@@ -18,6 +18,10 @@ protocol DramaRepository: Sendable {
 
     /// 이 드라마를 볼 수 있는 채널 목록 (본방 + OTT 다시보기).
     func availability(for dramaId: UUID) async throws -> [Channel]
+
+    /// 지정 기간 내 이 드라마의 예정된 에피소드. 알림 스케줄링용.
+    /// - Parameter until: exclusive upper bound.
+    func upcomingEpisodes(dramaId: UUID, from: Date, until: Date) async throws -> [Episode]
 }
 
 // MARK: - Search

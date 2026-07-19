@@ -22,16 +22,28 @@ struct RootView: View {
             ProfileView()
                 .tabItem { Label("마이", systemImage: "person.crop.circle") }
         }
-        // 앱 부팅 시 세션이 살아있으면 서버와 즐겨찾기 재정합.
-        .task { await deps.favoritesService.syncFromServer(in: modelContext) }
+        // 앱 부팅 시 세션이 살아있으면 서버와 즐겨찾기 재정합 + 알림 재예약.
+        .task {
+            await deps.favoritesService.syncFromServer(in: modelContext)
+            await reconcileNotifications()
+        }
         // 로그인 → 서버와 병합. 로그아웃 → 계정 소유 즐겨찾기 로컬에서 제거 (게스트 origin 은 보존).
         .onChange(of: deps.authStore.isSignedIn) { _, isNowSignedIn in
             if isNowSignedIn {
-                Task { await deps.favoritesService.syncFromServer(in: modelContext) }
+                Task {
+                    await deps.favoritesService.syncFromServer(in: modelContext)
+                    await reconcileNotifications()
+                }
             } else {
                 deps.favoritesService.clearOwnedFavorites(in: modelContext)
+                Task { await reconcileNotifications() }
             }
         }
+    }
+
+    private func reconcileNotifications() async {
+        let favorites = (try? modelContext.fetch(FetchDescriptor<FavoriteDrama>())) ?? []
+        await deps.notificationScheduler.reconcile(favorites: favorites)
     }
 }
 

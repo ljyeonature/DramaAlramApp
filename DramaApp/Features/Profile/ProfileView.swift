@@ -1,24 +1,26 @@
 import SwiftUI
+import UIKit
 import AuthenticationServices
+import UserNotifications
 
 struct ProfileView: View {
     @Environment(AppDependencies.self) private var deps
 
     @State private var errorMessage: String?
+    @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
 
     var body: some View {
         NavigationStack {
             List {
                 accountSection
 
-                Section("알림") {
-                    LabeledContent("방영 알림", value: "Week 6")
-                }
+                notificationSection
                 Section("정보") {
                     LabeledContent("버전", value: appVersion)
                 }
             }
             .navigationTitle("마이")
+            .task { notificationStatus = await deps.notificationScheduler.authorizationStatus() }
             .alert("로그인 실패", isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
@@ -50,6 +52,46 @@ struct ProfileView: View {
                     .font(AppTypography.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    // MARK: - Notification section
+
+    @ViewBuilder
+    private var notificationSection: some View {
+        Section("알림") {
+            LabeledContent("방영 알림 상태", value: notificationStatusLabel)
+            switch notificationStatus {
+            case .notDetermined:
+                Button("알림 허용하기") {
+                    Task {
+                        _ = await deps.notificationScheduler.requestAuthorization()
+                        notificationStatus = await deps.notificationScheduler.authorizationStatus()
+                    }
+                }
+            case .denied:
+                Button("설정에서 알림 허용") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+            default:
+                EmptyView()
+            }
+            Text("즐겨찾기한 드라마의 방영 \(NotificationScheduler.leadMinutes)분 전 알림이 도착합니다.")
+                .font(AppTypography.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var notificationStatusLabel: String {
+        switch notificationStatus {
+        case .authorized: return "허용됨"
+        case .provisional: return "임시 허용"
+        case .denied: return "차단됨"
+        case .notDetermined: return "미결정"
+        case .ephemeral: return "임시(앱클립)"
+        @unknown default: return "?"
         }
     }
 

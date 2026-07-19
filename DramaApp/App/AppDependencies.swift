@@ -9,6 +9,7 @@ final class AppDependencies {
     let dramaRepository: any DramaRepository
     let authStore: AuthStore
     let favoritesService: FavoritesService
+    let notificationScheduler: NotificationScheduler
 
     init() {
         if SupabaseConfig.isConfigured, let url = SupabaseConfig.baseURL {
@@ -32,8 +33,13 @@ final class AppDependencies {
                     return await store.currentAuthorizationToken()
                 }
             )
-            self.dramaRepository = SupabaseDramaRepository(http: http)
-            self.favoritesService = FavoritesService(http: http, authStore: store)
+            let repo = SupabaseDramaRepository(http: http)
+            self.dramaRepository = repo
+            let scheduler = NotificationScheduler(repository: repo)
+            self.notificationScheduler = scheduler
+            self.favoritesService = FavoritesService(
+                http: http, authStore: store, notificationScheduler: scheduler
+            )
             print("[AppDependencies] Supabase 활성 — \(url.host ?? "?")")
         } else {
             // Mock 모드: 로그인/서버 mirror 는 no-op 이지만 인터페이스는 그대로 노출.
@@ -45,8 +51,13 @@ final class AppDependencies {
             )
             let http = SupabaseHTTPClient(baseURL: dummyURL, apiKey: "", tokenProvider: { "" })
             self.authStore = store
-            self.dramaRepository = MockDramaRepository()
-            self.favoritesService = FavoritesService(http: http, authStore: store)
+            let repo = MockDramaRepository()
+            self.dramaRepository = repo
+            let scheduler = NotificationScheduler(repository: repo)
+            self.notificationScheduler = scheduler
+            self.favoritesService = FavoritesService(
+                http: http, authStore: store, notificationScheduler: scheduler
+            )
             print("[AppDependencies] ⚠ SupabaseConfig 미설정 — Mock 모드")
         }
     }
@@ -55,11 +66,13 @@ final class AppDependencies {
     init(
         dramaRepository: any DramaRepository,
         authStore: AuthStore,
-        favoritesService: FavoritesService
+        favoritesService: FavoritesService,
+        notificationScheduler: NotificationScheduler
     ) {
         self.dramaRepository = dramaRepository
         self.authStore = authStore
         self.favoritesService = favoritesService
+        self.notificationScheduler = notificationScheduler
     }
 
     /// SwiftUI Preview 전용. 실서버 접근 없이 즉시 렌더 가능.
@@ -74,11 +87,15 @@ final class AppDependencies {
             baseURL: dummyURL, redirectURL: "", callbackScheme: ""
         )
         let http = SupabaseHTTPClient(baseURL: dummyURL, apiKey: "", tokenProvider: { "" })
-        let service = FavoritesService(http: http, authStore: store)
+        let scheduler = NotificationScheduler(repository: repo)
+        let service = FavoritesService(
+            http: http, authStore: store, notificationScheduler: scheduler
+        )
         return AppDependencies(
             dramaRepository: repo,
             authStore: store,
-            favoritesService: service
+            favoritesService: service,
+            notificationScheduler: scheduler
         )
     }
 }

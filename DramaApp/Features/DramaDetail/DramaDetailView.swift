@@ -28,6 +28,11 @@ struct DramaDetailView: View {
                         ottRow
                     }
                 }
+                if let fav = matchingFavorites.first {
+                    sectionView(title: "알림") {
+                        notifyToggle(for: fav)
+                    }
+                }
                 if let synopsis = drama.synopsis, !synopsis.isEmpty {
                     sectionView(title: "시놉시스") {
                         Text(synopsis)
@@ -72,6 +77,28 @@ struct DramaDetailView: View {
         let willBeFavorite = !isFavorited
         Task {
             await deps.favoritesService.setFavorite(willBeFavorite, drama: drama, in: modelContext)
+        }
+    }
+
+    // MARK: - Notify toggle
+
+    private func notifyToggle(for fav: FavoriteDrama) -> some View {
+        Toggle(isOn: Binding(
+            get: { fav.notifyAir },
+            set: { newValue in
+                fav.notifyAir = newValue
+                try? modelContext.save()
+                Task {
+                    if newValue {
+                        await deps.notificationScheduler.schedule(for: fav)
+                    } else {
+                        deps.notificationScheduler.cancelAll(for: fav.dramaId)
+                    }
+                }
+            }
+        )) {
+            Text("방영 \(NotificationScheduler.leadMinutes)분 전 알림")
+                .font(.body)
         }
     }
 

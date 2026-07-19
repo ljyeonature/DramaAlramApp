@@ -9,10 +9,16 @@ import SwiftData
 final class FavoritesService {
     private let http: SupabaseHTTPClient
     private let authStore: AuthStore
+    private let notificationScheduler: NotificationScheduler
 
-    init(http: SupabaseHTTPClient, authStore: AuthStore) {
+    init(
+        http: SupabaseHTTPClient,
+        authStore: AuthStore,
+        notificationScheduler: NotificationScheduler
+    ) {
         self.http = http
         self.authStore = authStore
+        self.notificationScheduler = notificationScheduler
     }
 
     // MARK: - 조회 헬퍼
@@ -36,6 +42,15 @@ final class FavoritesService {
         }
         try? context.save()
 
+        // 알림 예약/취소 — 서버 mirror 와 독립적으로 로컬만 있어도 동작해야 함.
+        if isFav {
+            if let fav = fetchLocal(dramaId: drama.id, in: context) {
+                await notificationScheduler.schedule(for: fav)
+            }
+        } else {
+            notificationScheduler.cancelAll(for: drama.id)
+        }
+
         guard authStore.isSignedIn else { return }
         do {
             try await mirrorRemote(isFav: isFav, dramaId: drama.id)
@@ -43,6 +58,14 @@ final class FavoritesService {
             // 로컬은 이미 반영. 다음 syncFromServer 호출 때 재정합 될 것.
             print("[FavoritesService] remote mirror 실패 — \(error)")
         }
+    }
+
+    private func fetchLocal(dramaId: UUID, in context: ModelContext) -> FavoriteDrama? {
+        var descriptor = FetchDescriptor<FavoriteDrama>(
+            predicate: #Predicate { $0.dramaId == dramaId }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
     }
 
     // MARK: - 로컬 CRUD

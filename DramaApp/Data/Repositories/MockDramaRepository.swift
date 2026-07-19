@@ -46,6 +46,21 @@ final class MockDramaRepository: DramaRepository {
         try await Task.sleep(for: .milliseconds(100))
         return []
     }
+
+    func upcomingEpisodes(dramaId: UUID, from: Date, until: Date) async throws -> [Episode] {
+        try await Task.sleep(for: .milliseconds(50))
+        // 오늘부터 3일치 임의 에피소드 — UI 확인용.
+        let cal = Calendar(identifier: .gregorian)
+        return (0..<3).compactMap { offset in
+            guard let day = cal.date(byAdding: .day, value: offset, to: from),
+                  let airTime = cal.date(bySettingHour: 21, minute: 0, second: 0, of: day),
+                  airTime < until else { return nil }
+            return Episode(
+                id: UUID(), dramaId: dramaId, number: 10 + offset,
+                airTime: airTime, durationMin: 70, isSpecial: false
+            )
+        }
+    }
 }
 
 private enum MockData {

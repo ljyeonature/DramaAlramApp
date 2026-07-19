@@ -124,6 +124,25 @@ final class SupabaseDramaRepository: DramaRepository {
         return rows.compactMap { $0.channel }
     }
 
+    // MARK: - Upcoming episodes (for notifications)
+
+    func upcomingEpisodes(dramaId: UUID, from: Date, until: Date) async throws -> [Episode] {
+        try await http.get(
+            "episodes",
+            queryItems: [
+                URLQueryItem(name: "drama_id",
+                             value: "eq.\(dramaId.uuidString.lowercased())"),
+                URLQueryItem(name: "air_time",
+                             value: "gte.\(Self.utcISO.string(from: from))"),
+                URLQueryItem(name: "air_time",
+                             value: "lt.\(Self.utcISO.string(from: until))"),
+                URLQueryItem(name: "order", value: "air_time.asc"),
+                URLQueryItem(name: "select", value: "*"),
+            ],
+            as: [Episode].self
+        )
+    }
+
     // MARK: - Search
 
     func search(query: String) async throws -> SearchResults {
