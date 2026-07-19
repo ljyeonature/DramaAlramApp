@@ -80,6 +80,7 @@ DramaApp/
 │   │   ├── Repositories/              # DramaRepository + FavoritesService (로컬↔서버)
 │   │   ├── Auth/                      # AuthStore, SupabaseAuthClient, OAuthFlow, Keychain
 │   │   ├── Network/                   # SupabaseHTTPClient, SupabaseConfig
+│   │   ├── Notifications/             # NotificationScheduler + Delegate (Week 6 로컬 알림)
 │   │   └── Local/                     # FavoriteDrama (SwiftData 모델)
 │   ├── DramaApp.entitlements          # (빈 dict — Xcode 재추가 방지용)
 │   └── DesignSystem/                  # AppColors/Typography/Spacing 토큰
@@ -90,7 +91,8 @@ DramaApp/
 │   │   ├── tmdb.ts                    # TMDB API 클라이언트
 │   │   ├── supabase.ts                # Supabase upsert 헬퍼
 │   │   ├── mapping.ts                 # TMDB → 우리 스키마 매핑
-│   │   └── airTimes.ts                # 채널별 표준 방영 시간 추정
+│   │   ├── airTimes.ts                # 채널별 표준 방영 시간 추정
+│   │   └── naver.ts                   # Naver 통합검색 → 드라마별 방영시간 자동 추출
 │   ├── package.json
 │   └── .env.example
 ├── supabase/
@@ -101,7 +103,8 @@ DramaApp/
 │       ├── 001_unique_tmdb_id.sql
 │       ├── 002_persons_and_casts.sql
 │       ├── 003_drama_availability.sql
-│       └── 004_auth_bridge.sql        # auth.users → public.users 자동 브릿지 트리거
+│       ├── 004_auth_bridge.sql        # auth.users → public.users 자동 브릿지 트리거
+│       └── 005_drama_air_time_override.sql # dramas.air_hour_kst / air_minute_kst + recompute_episode_air_times()
 ├── .github/workflows/
 │   ├── crawler-daily.yml              # 매일 KST 03:00
 │   └── crawler-weekly.yml             # 매주 일요일 04:00
@@ -109,7 +112,8 @@ DramaApp/
 ├── WEEK1_SETUP.md                     # 초기 세팅 상세 가이드
 ├── WEEK5_SETUP.md                     # 로그인 + 즐겨찾기 동기화 세팅
 ├── WEEK5_GOOGLE_SETUP.md              # Google OAuth 상세 (Cloud Console + Supabase)
-├── WORKLOG_YYYY-MM-DD.md              # 날짜별 작업 로그
+├── WORKLOG_2026-07-12.md              # 날짜별 작업 로그 (Week 5: OAuth + 즐겨찾기 sync)
+├── WORKLOG_2026-07-19.md              # Week 6: 알림 · 방영시간 정확도 · 전편공개 그룹핑
 └── CLAUDE.md                          # Claude Code용 프로젝트 노트
 ```
 
@@ -128,12 +132,18 @@ public.users ──< favorites >── dramas ──< episodes
 ```
 
 - **`dramas.status`**: `UPCOMING` · `ON_AIR` · `ENDED` — TMDB status에서 매핑
+- **`dramas.air_hour_kst / air_minute_kst`**: 드라마별 방영시간 오버라이드 (migration 005).
+  세팅되면 크롤러가 채널 기본 슬롯 대신 사용. Naver 크롤러가 자동 채움
 - **`episodes.air_time`**: `timestamptz` (UTC). 클라이언트는 KST로 표시
 - **`drama_availability`**: M:N. "이 드라마를 볼 수 있는 채널" 의 single source of truth
-- **`push_jobs`**: 방영 10분 전 알림 큐 (Week 6+ 구현 예정)
 - 모든 테이블 RLS 활성화. 공개 읽기(`select`)는 허용, 쓰기는 로그인 사용자만
 - **`auth.users` → `public.users` 브릿지**: OAuth 로그인 시 `handle_new_auth_user` 트리거가
   `public.users` 에 동일 `id` 로 자동 삽입. RLS 정책 `auth.uid() = user_id` 가 favorites 에서 그대로 동작
+
+### iOS 로컬 (SwiftData)
+
+- **`FavoriteDrama.ownerUserId: String?`** — nil = 게스트 추가, 값 = 계정 소유.
+  로그아웃 시 non-nil 만 삭제 → 게스트 origin 즐겨찾기는 보존.
 
 ---
 
@@ -155,6 +165,7 @@ public.users ──< favorites >── dramas ──< episodes
    supabase/migrations/002_persons_and_casts.sql
    supabase/migrations/003_drama_availability.sql
    supabase/migrations/004_auth_bridge.sql
+   supabase/migrations/005_drama_air_time_override.sql
    ```
 4. Authentication → **Providers → Google** 활성화 + Client ID/Secret 등록
    → 자세한 절차는 [`WEEK5_GOOGLE_SETUP.md`](./WEEK5_GOOGLE_SETUP.md)
@@ -282,8 +293,14 @@ protocol DramaRepository: Sendable {
     func search(query: String) async throws -> SearchResults
     func cast(for dramaId: UUID) async throws -> [CastMember]
     func availability(for dramaId: UUID) async throws -> [Channel]
+    /// 지정 기간 내 예정 에피소드 (알림 스케줄러용). Week 6+
+    func upcomingEpisodes(dramaId: UUID, from: Date, until: Date) async throws -> [Episode]
 }
 ```
+
+편성표 뷰는 `[ScheduledEpisode]` 를 `.groupedByDramaDay()` 로 변환해
+`DailyScheduleItem` 배열로 표시 — 같은 (드라마, KST 하루) 회차를 한 행으로 묶어
+Netflix/티빙 전편 공개 케이스를 자연스럽게 처리.
 
 - **`MockDramaRepository`** — 오프라인/프리뷰 개발
 - **`SupabaseDramaRepository`** — 프로덕션
@@ -313,9 +330,10 @@ protocol DramaRepository: Sendable {
 | 2 | TMDB 크롤러 (드라마/회차/출연/OTT availability) | ✅ |
 | 3 | SupabaseDramaRepository, 편성표 실데이터, 상세 화면 | ✅ |
 | 4 | 즐겨찾기 (SwiftData), 리스트 내 하트 토글 | ✅ |
-| 5 | Google OAuth (ASWebAuth + Supabase PKCE), 로컬↔서버 즐겨찾기 sync | ✅ 코드 · ⏳ 대시보드 설정 대기 |
-| 6 | 푸시 알림 (APNs, `push_jobs` 워커) | 예정 |
-| 7 | 정밀 방영 시간 크롤 (방송사 직접), 홈피드 | 예정 |
+| 5 | Google OAuth (ASWebAuth + Supabase PKCE), 로컬↔서버 즐겨찾기 sync | ✅ |
+| 6 | 로컬 알림 (방영 T-10min), 방영시간 정확도 (Naver 크롤 + 오버라이드), 전편공개 그룹핑 | ✅ |
+| 6.5 | 원격 푸시 (APNs) — 유료 Apple Developer 확보 시 | 대기 |
+| 7 | 커뮤니티 (리뷰/평점), 위젯, 방송사 정밀 EPG 크롤 | 예정 |
 | 8 | 마이 페이지, 회원탈퇴, 약관, TestFlight | 예정 |
 | 9~10 | 베타 피드백, 크래시 모니터링 | 예정 |
 | 11 | App Store v1.0 (커뮤니티 미포함) | 예정 |
@@ -329,6 +347,8 @@ protocol DramaRepository: Sendable {
 - [`WEEK1_SETUP.md`](./WEEK1_SETUP.md) — 초기 셋업 상세 (Supabase/TMDB 계정 발급 스크린 단위)
 - [`WEEK5_SETUP.md`](./WEEK5_SETUP.md) — 로그인 + 즐겨찾기 동기화 인프라 세팅
 - [`WEEK5_GOOGLE_SETUP.md`](./WEEK5_GOOGLE_SETUP.md) — Google OAuth 대시보드 설정 (Cloud Console + Supabase)
+- [`WORKLOG_2026-07-19.md`](./WORKLOG_2026-07-19.md) — Week 6: 로컬 알림 + Naver 방영시간 + 전편공개 그룹핑
+- [`WORKLOG_2026-07-12.md`](./WORKLOG_2026-07-12.md) — Week 5: OAuth + 즐겨찾기 sync
 - [`CLAUDE.md`](./CLAUDE.md) — Claude Code 작업 시 알아야 할 프로젝트 관례
 - [`crawler/README.md`](./crawler/README.md) — 크롤러 상세 (스크립트 옵션, 트러블슈팅)
 

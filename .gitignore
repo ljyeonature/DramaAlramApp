@@ -49,3 +49,6 @@ yarn-error.log*
 *.log
 *.tmp
 .env*.local
+
+# Claude Code 세션 스크래치 (수동 테스트 스크립트 등)
+scratchpad/
