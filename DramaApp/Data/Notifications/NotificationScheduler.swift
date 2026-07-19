@@ -66,8 +66,10 @@ final class NotificationScheduler {
         }
 
         cancelAll(for: favorite.dramaId)
-        for episode in episodes {
-            scheduleOne(favorite: favorite, episode: episode)
+        // (드라마, 하루) 단위로 묶어서 알림 1개. 전편 공개 OTT 는 8회 → 1개 알림.
+        let groups = episodes.groupedByDay()
+        for group in groups {
+            scheduleOne(favorite: favorite, group: group)
         }
     }
 
@@ -99,18 +101,29 @@ final class NotificationScheduler {
         return status == .authorized || status == .provisional
     }
 
-    private func scheduleOne(favorite: FavoriteDrama, episode: Episode) {
-        let triggerDate = episode.airTime.addingTimeInterval(TimeInterval(-Self.leadMinutes * 60))
+    private func scheduleOne(
+        favorite: FavoriteDrama,
+        group: (airTime: Date, episodes: [Episode])
+    ) {
+        let triggerDate = group.airTime.addingTimeInterval(TimeInterval(-Self.leadMinutes * 60))
         // 이미 지난 시간이면 스킵.
         guard triggerDate > Date() else { return }
 
+        let sortedEps = group.episodes.sorted { $0.number < $1.number }
+        guard let firstEp = sortedEps.first, let lastEp = sortedEps.last else { return }
+
         let content = UNMutableNotificationContent()
         content.title = favorite.title
-        content.body = "\(episode.number)회 방영 \(Self.leadMinutes)분 전입니다."
+        content.body = notificationBody(
+            first: firstEp.number,
+            last: lastEp.number,
+            count: sortedEps.count
+        )
         content.sound = .default
         content.userInfo = [
             "drama_id": favorite.dramaId.uuidString,
-            "episode_id": episode.id.uuidString,
+            // 배치 알림은 대표 회차(첫 회) id 만 담음. 딥링크 시 상세 뷰로 이동.
+            "episode_id": firstEp.id.uuidString,
         ]
 
         let comps = Calendar.current.dateComponents(
@@ -118,7 +131,7 @@ final class NotificationScheduler {
         )
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
         let request = UNNotificationRequest(
-            identifier: Self.identifier(dramaId: favorite.dramaId, episodeId: episode.id),
+            identifier: Self.identifier(dramaId: favorite.dramaId, episodeId: firstEp.id),
             content: content,
             trigger: trigger
         )
@@ -127,6 +140,20 @@ final class NotificationScheduler {
                 print("[NotificationScheduler] add 실패 — \(error)")
             }
         }
+    }
+
+    /// 배치 여부에 따른 알림 본문.
+    /// - 1회: "8회 방영 10분 전입니다."
+    /// - 배치: "1-8회 공개 10분 전입니다."
+    private func notificationBody(first: Int, last: Int, count: Int) -> String {
+        if count == 1 {
+            return "\(first)회 방영 \(Self.leadMinutes)분 전입니다."
+        }
+        let contiguous = last - first + 1 == count
+        if contiguous {
+            return "\(first)-\(last)회 공개 \(Self.leadMinutes)분 전입니다."
+        }
+        return "\(count)개 회차 공개 \(Self.leadMinutes)분 전입니다."
     }
 
     // MARK: - Debug helpers

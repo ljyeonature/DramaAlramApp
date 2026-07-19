@@ -10,7 +10,7 @@ struct ScheduleView: View {
     @State private var channels: [Channel] = []
     @State private var selectedChannelID: UUID? = nil   // nil = 전체
 
-    @State private var schedule: [ScheduledEpisode] = []
+    @State private var schedule: [DailyScheduleItem] = []
     @State private var isLoading = false
     @State private var loadError: String?
 
@@ -193,7 +193,8 @@ struct ScheduleView: View {
         defer { isLoading = false }
         let ids: [UUID]? = selectedChannelID.map { [$0] }
         do {
-            schedule = try await deps.dramaRepository.schedule(date: date, channelIDs: ids)
+            let raw = try await deps.dramaRepository.schedule(date: date, channelIDs: ids)
+            schedule = raw.groupedByDramaDay()
         } catch {
             loadError = error.localizedDescription
             schedule = []
@@ -202,7 +203,7 @@ struct ScheduleView: View {
 }
 
 private struct ScheduleRow: View {
-    let item: ScheduledEpisode
+    let item: DailyScheduleItem
     let isFavorited: Bool
     let onToggleFavorite: () -> Void
 
@@ -212,7 +213,7 @@ private struct ScheduleRow: View {
 
             VStack(alignment: .leading, spacing: AppSpacing.xs) {
                 HStack(spacing: AppSpacing.sm) {
-                    Text(item.episode.airTime, format: .dateTime.hour().minute())
+                    Text(item.airTime, format: .dateTime.hour().minute())
                         .font(AppTypography.timeMono)
                         .foregroundStyle(.secondary)
                     if isLive {
@@ -226,7 +227,7 @@ private struct ScheduleRow: View {
                 Text(item.drama.title)
                     .font(AppTypography.body)
                     .lineLimit(2)
-                Text("\(item.channel.name) · \(item.episode.number)회")
+                Text("\(item.channel.name) · \(item.episodeLabel)")
                     .font(AppTypography.caption)
                     .foregroundStyle(.secondary)
             }
@@ -272,8 +273,8 @@ private struct ScheduleRow: View {
 
     private var isLive: Bool {
         let now = Date()
-        let end = item.episode.airTime.addingTimeInterval(Double(item.episode.durationMin) * 60)
-        return now >= item.episode.airTime && now < end
+        let end = item.airTime.addingTimeInterval(Double(item.durationMin) * 60)
+        return now >= item.airTime && now < end
     }
 }
 
